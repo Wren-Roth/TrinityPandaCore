@@ -861,11 +861,12 @@ class npc_aysa : public CreatureScript
                             auto const maxSpawns = std::max<size_t>(maxSize * 3, 3);
 
                             for (size_t i = 0; i < maxSpawns; ++i)
-                                if (TempSummon* temp = me->SummonCreature(NPC_TROUBLEMAKER, 1171.71f, 3443.82f, 104.20f, 3.3f, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 10000))
+                                if (TempSummon* temp = me->SummonCreature(NPC_TROUBLEMAKER, 1152.74f, 3438.29f, 104.97f, 3.3f, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 10000))
                                 {
                                     temp->AddThreat(me, 250.0f);
-
+                                  //  temp->GetMotionMaster()->MoveJump(1152.74f, 3438.29f, 104.97f, 10, 20, 11);
                                     temp->SetInCombatWith(me);
+                                  //  temp->GetVictim();
                                     me->SetInCombatWith(me);
                                     temp->GetMotionMaster()->MoveChase(me);
                                 }

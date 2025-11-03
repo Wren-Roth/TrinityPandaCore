@@ -32,11 +32,9 @@ class npc_master_shang_xi_temple : public CreatureScript
         {
             if (quest->GetQuestId() == 29776) // Morning Breeze Village
             {
-                if (Creature* vehicle = player->SummonCreature(55685, player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation()))
-                {
-                    player->AddAura(99385, vehicle);
-                    player->EnterVehicle(vehicle);
-                }
+                
+                    player->NearTeleportTo(1131.22f, 4156.44f, 190.64f, 5.569f); //quick fix for the quest causing character to lock in place until logout.
+                
             }
 
             return true;
@@ -64,7 +62,7 @@ class npc_master_shang_xi_temple : public CreatureScript
                     player->AddAura(99385, vehicle);
                     player->EnterVehicle(vehicle);
                 }*/
-
+               
                 player->NearTeleportTo(926.58f, 3605.33f, 251.63f, 3.114f);
             }
 
@@ -73,7 +71,7 @@ class npc_master_shang_xi_temple : public CreatureScript
         }
 };
 
-class npc_wind_vehicle : public CreatureScript
+/*class npc_wind_vehicle : public CreatureScript
 {
     public:
         npc_wind_vehicle() : CreatureScript("npc_wind_vehicle") { }
@@ -122,7 +120,7 @@ class npc_wind_vehicle : public CreatureScript
             return new npc_wind_vehicleAI(creature);
         }
 };
-
+*/
 struct AreaTrigger_at_wind_temple_entrance : public AreaTriggerScript
 {
     enum
@@ -1101,7 +1099,7 @@ class spell_monkey_wisdom : public SpellScriptLoader
 void AddSC_wandering_island_west()
 {
     new npc_master_shang_xi_temple();
-    new npc_wind_vehicle();
+  //  new npc_wind_vehicle();
     new AreaTrigger_at_wind_temple_entrance();
     new npc_aysa_wind_temple_escort();
     new npc_frightened_wind();
