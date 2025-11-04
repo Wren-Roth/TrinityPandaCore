@@ -4,6 +4,21 @@
 #include "ScriptedEscortAI.h"
 #include "Vehicle.h"
 
+#include "CombatAI.h"
+#include "MotionMaster.h"
+#include "ObjectAccessor.h"
+#include "Player.h"
+#include "PassiveAI.h"
+
+
+#include "SpellInfo.h"
+#include "SpellScript.h"
+#include "TemporarySummon.h"
+
+
+
+#include "GameObjectAI.h"
+#include "TaskScheduler.h"
 enum CreatureIds
 {
     NPC_PRINCE_LIAM_GREYMANE                          = 34913,
@@ -74,9 +89,9 @@ enum SpellIds
     SPELL_CANNON_FIRE                                  = 68235,
     SPELL_GILNEAS_CANNON_CAMERA                        = 93555,
     SPELL_SUMMON_JOSIAH_AVERY                          = 67350,
-    SPELL_GET_SHOT                                     = 67349,
+    //SPELL_GET_SHOT                                     = 67349,
     SPELL_SUMMON_JOSIAH                                = 67350,
-    SPELL_PULL_TO                                      = 67357,
+   
     SPELL_PHASE_QUEST_2                                = 59073,
     SPELL_SUMMON_GILNEAN_MASTIFF                       = 67807,
     SPELL_DISMISS_GILNEAN_MASTIFF                      = 43511,
@@ -98,7 +113,12 @@ enum NpcTextIds
     YELL_PRINCE_LIAM_GREYMANE_4                        = -1638028,
     YELL_PRINCE_LIAM_GREYMANE_5                        = -1638029,
     DELAY_YELL_PRINCE_LIAM_GREYMANE                    = 2000,
-
+    SAY_JOSIAH_AVERY_1 = 0,
+    SAY_JOSIAH_AVERY_2 = 1,
+    SAY_JOSIAH_AVERY_3 = 2,
+    SAY_JOSIAH_AVERY_4 = 3,
+    SAY_JOSIAH_AVERY_5 = 4,
+    SAY_JOSIAH_AVERY_6 = 5,
     SAY_PANICKED_CITIZEN_1                             = -1638016,
     SAY_PANICKED_CITIZEN_2                             = -1638017,
     SAY_PANICKED_CITIZEN_3                             = -1638018,
@@ -135,7 +155,21 @@ enum NpcTextIds
     SAY_LORD_GODFREY_P4                                = 0,
     SAY_NPC_KRENNAN_ARANAS_TREE                        = 0
 };
+enum gilnas
+{
+    NPC_GILNEAS_MASTIFF = 35631,
+    SPELL_SUMMON_MASTIFF = 67807,
+    NPC_GENERIC_TRIGGER_LAB = 35374,
+    NPC_LORNA_CROWLEY = 35378,
+    SPELL_PULL_TO = 67357,
+    SPELL_GET_SHOT = 67349,
+    SPELL_COSMETIC_ATTACK = 69873,
+    SPELL_SHOOT_INSTAKILL = 67593, // Visual problem
+    EVENT_COSMETIC_ATTACK = 1,
+    EVENT_JUMP_TO_PLAYER = 2,
+    EVENT_SHOOT_JOSIAH = 3,
 
+};
 enum SoundIds
 {
     SOUND_SWORD_FLESH                                 = 143,
@@ -953,12 +987,235 @@ public:
     };
 };
 
+struct npc_josiah_avery : public ScriptedAI
+{
+
+    npc_josiah_avery(Creature* creature) : ScriptedAI(creature) {}
+
+    uint32 _text_timer;
+    uint32 _current_text;
+
+    void Reset() override
+    {
+        _text_timer = 20 * IN_MILLISECONDS;
+        _current_text = 1;
+    }
+ 
+
+    
+    void UpdateAI(uint32 diff) override
+    {
+        if (!me->GetVictim() && me->FindNearestPlayer(20.0f))
+        {
+
+            
+            if (_text_timer <= diff)
+            {
+                switch (_current_text)
+                {
+                case 1:
+                    Talk(SAY_JOSIAH_AVERY_1);
+                    _current_text++;
+                    break;
+                case 2:
+                    Talk(SAY_JOSIAH_AVERY_2);
+                    _current_text++;
+                    break;
+                case 3:
+                    Talk(SAY_JOSIAH_AVERY_3);
+                    _current_text++;
+                    break;
+                case 4:
+                    Talk(SAY_JOSIAH_AVERY_4);
+                    _current_text++;
+                    break;
+                case 5:
+                    Talk(SAY_JOSIAH_AVERY_5);
+                    _current_text++;
+                    break;
+                case 6:
+                    Talk(SAY_JOSIAH_AVERY_6);
+                    _current_text = 1;
+                    break;
+                }
+
+                _text_timer = 20 * IN_MILLISECONDS;
+            }
+            else
+            {
+                _text_timer -= diff;
+            }
+            return;
+        }
+    }
+    void OnQuestAccept(Player* player, Creature* /*creature*/, Quest const* quest)
+    {
+        if (quest->GetQuestId() == 14159) // Morning Breeze Village
+        {
+
+            sQuestComplete == quest->QUEST_THE_REBEL_LORDS_ARSENAL;
+        }
+        return;
+
+    }
+};
+Position const josiahJumpPos = { -1796.63f, 1427.73f, 12.4624f };
+
+struct npc_josiah_avery_worgen_form : public PassiveAI
+{
+    npc_josiah_avery_worgen_form(Creature* creature) : PassiveAI(creature) {}
+
+    void IsSummonedBy(Unit* summoner) override
+    {
+        _playerGuid = summoner->GetGUID();
+
+        me->m_Events.AddLambdaEventAtOffset([this, summoner]()
+            {
+                me->SetFacingToObject(summoner);
+                _events.ScheduleEvent(EVENT_COSMETIC_ATTACK, 500);
+            }, 200);
+    }
+
+    void SpellHit(Unit* /*caster*/, const SpellInfo* spell)
+    {
+        if (spell->Id == SPELL_SHOOT_INSTAKILL)
+            me->CastSpell(me, SPELL_GET_SHOT);
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        me->DespawnOrUnsummon(5 * IN_MILLISECONDS);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        _events.Update(diff);
+
+        while (uint32 eventId = _events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+            case EVENT_COSMETIC_ATTACK:
+                if (Player* player = ObjectAccessor::GetPlayer(*me, _playerGuid))
+                {
+                    DoCast(player, SPELL_COSMETIC_ATTACK);
+
+                    me->m_Events.AddLambdaEventAtOffset([this, player]()
+                        {
+                            if (Creature* lorna = me->FindNearestCreature(NPC_LORNA_CROWLEY, 30.0f, true))
+                                player->GetMotionMaster()->MoveKnockbackFrom(lorna->GetPositionX(), lorna->GetPositionY(), 30, 30);
+                        }, 400);
+
+                    if (Creature* lorna = me->FindNearestCreature(NPC_LORNA_CROWLEY, 30.0f, true))
+                        if (Creature* labTrigger = lorna->FindNearestCreature(NPC_GENERIC_TRIGGER_LAB, 5.0f, true))
+                            labTrigger->CastSpell(player, SPELL_PULL_TO);
+
+                    _events.ScheduleEvent(EVENT_JUMP_TO_PLAYER, 1);
+                }
+                break;
+            case EVENT_JUMP_TO_PLAYER:
+                me->GetMotionMaster()->MoveJump(josiahJumpPos, 10.0f, 14.18636f);
+                _events.ScheduleEvent(EVENT_SHOOT_JOSIAH, 1 + 200);
+                break;
+            case EVENT_SHOOT_JOSIAH:
+                if (Creature* lorna = me->FindNearestCreature(NPC_LORNA_CROWLEY, 30.0f, true))
+                    lorna->CastSpell(me, SPELL_SHOOT_INSTAKILL, true);
+                break;
+            default:
+                break;
+            }
+        }
+    }
+
+private:
+    ObjectGuid _playerGuid;
+    EventMap _events;
+};
+
+class spell_gilneas_pull_to : public SpellScript
+{
+    PrepareSpellScript(spell_gilneas_pull_to);
+
+    void HandPullEffect(SpellEffIndex effIndex)
+    {
+        PreventHitDefaultEffect(effIndex);
+
+        if (Unit* playerTarget = GetHitPlayer())
+        {
+            if (Unit* trigger = GetCaster())
+            {
+                float angle = playerTarget->GetAngle(trigger);
+                playerTarget->SendMoveKnockBack(playerTarget->ToPlayer(), 30.0f, -7.361481f, cos(angle), sin(angle));
+            }
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_gilneas_pull_to::HandPullEffect, EFFECT_0, SPELL_EFFECT_PULL_TOWARDS);
+    }
+};
+
+class npc_lorna_crowley_basement : public CreatureScript
+{
+public:
+    npc_lorna_crowley_basement(const char* ScriptName) : CreatureScript(ScriptName) {}
+
+    bool OnQuestAccept(Player* player, Creature* creature, Quest const* quest)
+    {
+        if (quest->GetQuestId() == QUEST_FROM_THE_SHADOWS)
+        {
+            if (player->getClass() == CLASS_HUNTER)
+                player->UnsummonPetTemporaryIfAny();
+
+            player->CastSpell(player, SPELL_SUMMON_MASTIFF, false);
+            creature->AI()->Talk(0);
+        }
+        return true;
+    }
+
+    bool OnQuestReward(Player* player, Creature* creature, Quest const* quest, uint32 /*opt*/)
+    {
+        if (quest->GetQuestId() == QUEST_FROM_THE_SHADOWS)
+            if (Unit* charm = Unit::GetCreature(*creature, player->GetMinionGUID()))
+                if (charm->GetEntry() == NPC_GILNEAS_MASTIFF)
+                    if (Creature* mastiff = charm->ToCreature())
+                        mastiff->DespawnOrUnsummon();
+
+        if (player->getClass() == CLASS_HUNTER)
+            player->ResummonPetTemporaryUnSummonedIfAny();
+
+        return true;
+    }
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_lorna_crowley_basementAI(creature);
+    }
+
+    struct npc_lorna_crowley_basementAI : public ScriptedAI
+    {
+        npc_lorna_crowley_basementAI(Creature* creature) : ScriptedAI(creature)
+        {
+            me->SetReactState(REACT_PASSIVE);
+            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            if (!UpdateVictim())
+                return;
+        }
+    };
+};
+
 void AddSC_gilneas()
 {
     new npc_sean_dempsey();
     new npc_lord_darius_crowley_c1();
     new npc_worgen_runt_c1();
     new npc_worgen_alpha_c1();
+    RegisterCreatureAI(npc_josiah_avery);
     new npc_worgen_runt_c2();
     new npc_worgen_alpha_c2();
     new npc_captured_riding_bat();

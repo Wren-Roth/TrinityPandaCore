@@ -50,6 +50,22 @@ class BasicEvent
         uint64 m_execTime = 0;                              // planned time of next execution, filled by event handler
 };
 
+template<typename T>
+class LambdaBasicEvent : public BasicEvent
+{
+public:
+    LambdaBasicEvent(T&& callback) : BasicEvent(), _callback(std::move(callback)) {}
+
+    bool Execute(uint64, uint32) override
+    {
+        _callback();
+        return true;
+    }
+
+private:
+    T _callback;
+};
+
 class GroupedEvent : public BasicEvent
 {
 public:
@@ -111,7 +127,12 @@ class EventProcessor
         void KillCustomEvents(EventFilter const& filter);
         void AddEvent(BasicEvent* Event, uint64 e_time, bool set_addtime = true);
         void RescheduleEvent(BasicEvent* event, uint64 e_time);
+        template<typename T>
+        void AddLambdaEvent(T&& event, uint64 e_time, bool set_addtime = true) { AddEvent(new LambdaBasicEvent<T>(std::move(event)), e_time, set_addtime); }
 
+        void AddEventAtOffset(BasicEvent* event, uint32 offset) { AddEvent(event, CalculateTime(offset)); }
+        template<typename T>
+        void AddLambdaEventAtOffset(T&& event, uint32 offset) { AddEventAtOffset(new LambdaBasicEvent<T>(std::move(event)), offset); }
         uint64 CalculateTime(uint64 t_offset) const;
 
         void Schedule(uint32 delay, BasicEvent* Event) { AddEvent(Event, CalculateTime(delay)); }
