@@ -1000,8 +1000,7 @@ struct npc_josiah_avery : public ScriptedAI
         _text_timer = 20 * IN_MILLISECONDS;
         _current_text = 1;
     }
- 
-
+  
     
     void UpdateAI(uint32 diff) override
     {
@@ -1047,16 +1046,6 @@ struct npc_josiah_avery : public ScriptedAI
             }
             return;
         }
-    }
-    void OnQuestAccept(Player* player, Creature* /*creature*/, Quest const* quest)
-    {
-        if (quest->GetQuestId() == 14159) // Morning Breeze Village
-        {
-
-            sQuestComplete == quest->QUEST_THE_REBEL_LORDS_ARSENAL;
-        }
-        return;
-
     }
 };
 Position const josiahJumpPos = { -1796.63f, 1427.73f, 12.4624f };
