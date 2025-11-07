@@ -9,6 +9,7 @@ gilneas = works, can finish
 
 pet battles = working.
 
+Brawlers guild = working, up to rank 8. use item "Brawler's Guild rep fix" available from the vendor right beside bouncer.
 
 -------------------------------------------------------------
 current issues:
@@ -21,7 +22,6 @@ kazan = being tested.
 
 unknown issues:
 
-Brawlers guild = not yet scripted
 
 --------------------------------------------------------------
 
