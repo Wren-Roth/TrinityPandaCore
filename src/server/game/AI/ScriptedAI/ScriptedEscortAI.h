@@ -26,13 +26,14 @@
 
 struct Escort_Waypoint
 {
-    Escort_Waypoint(uint32 _id, float _x, float _y, float _z, uint32 _w)
+    Escort_Waypoint(uint32 _id, float _x, float _y, float _z, uint32 _w, bool _j)
     {
         id = _id;
         x = _x;
         y = _y;
         z = _z;
         WaitTimeMs = _w;
+        jump = _j;
     }
 
     uint32 id;
@@ -40,6 +41,7 @@ struct Escort_Waypoint
     float y;
     float z;
     uint32 WaitTimeMs;
+    bool jump;
 };
 
 enum eEscortState
@@ -75,7 +77,8 @@ struct npc_escortAI : public ScriptedAI
         void MovementInform(uint32, uint32);
 
         // EscortAI functions
-        void AddWaypoint(uint32 id, float x, float y, float z, uint32 waitTime = 0);    // waitTime is in ms
+         void AddWaypoint(uint32 id, float x, float y, float z, uint32 waitTime = 0, bool jump = false);
+      //  void AddWaypoint(uint32 id, float x, float y, float z, uint32 waitTime = 0);    // waitTime is in ms
 
         //this will set the current position to x/y/z/o, and the current WP to pointId.
         bool SetNextWaypoint(uint32 pointId, float x, float y, float z, float orientation);

@@ -1,232 +1,879 @@
+/*
+* This file is part of the Pandaria 5.4.8 Project. See THANKS file for Copyright information
+*
+* This program is free software; you can redistribute it and/or modify it
+* under the terms of the GNU General Public License as published by the
+* Free Software Foundation; either version 2 of the License, or (at your
+* option) any later version.
+*
+* This program is distributed in the hope that it will be useful, but WITHOUT
+* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+* FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+* more details.
+*
+* You should have received a copy of the GNU General Public License along
+* with this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+//  urand(18000, 23000));
+// for random times
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
-#include "Unit.h"
 #include "ScriptedEscortAI.h"
-#include "Vehicle.h"
-
-#include "CombatAI.h"
-#include "MotionMaster.h"
-#include "ObjectAccessor.h"
-#include "Player.h"
 #include "PassiveAI.h"
-
-
-#include "SpellInfo.h"
-#include "SpellScript.h"
-#include "TemporarySummon.h"
-
-
-
+#include "Vehicle.h"
 #include "GameObjectAI.h"
 #include "TaskScheduler.h"
-enum CreatureIds
-{
-    NPC_PRINCE_LIAM_GREYMANE                          = 34913,
-    NPC_GILNEAS_CITY_GUARD                            = 34916,
-    NPC_RAMPAGING_WORGEN_1                            = 34884,
-    NPC_RAMPAGING_WORGEN_2                            = 35660,
-    NPC_BLOODFANG_WORGEN                              = 35118,
-    NPC_SERGEANT_CLEESE                               = 35839,
-    NPC_MYRIAM_SPELLWALKER                            = 35872,
-    NPC_GILNEAN_ROYAL_GUARD                           = 35232,
-    NPC_FRIGHTENED_CITIZEN_1                          = 34981,
-    NPC_FRIGHTENED_CITIZEN_2                          = 35836,
-    NPC_DARIUS_CROWLEY                                = 35230,
-    NPC_NORTHGATE_REBEL_1                             = 36057, // phase 8 outside cathedral
-    NPC_NORTHGATE_REBEL_2                             = 41015, // phase 1024 inside cathedral
-    NPC_BLOODFANG_STALKER_C1                          = 35229, // Main spawns
-    NPC_BLOODFANG_STALKER_C2                          = 51277,
-    NPC_BLOODFANG_STALKER_CREDIT                      = 35582,
-    NPC_CROWLEY_HORSE                                 = 35231,
-    NPC_LORD_DARIUS_CROWLEY_C1                        = 35077, // Quest - By the skin of his teeth start/stop
-    NPC_WORGEN_ALPHA_C1                               = 35170, // Quest - By the skin of his teeth spawns
-    NPC_WORGEN_ALPHA_C2                               = 35167, // Quest - By the skin of his teeth spawns
-    NPC_WORGEN_RUNT_C1                                = 35188, // Quest - By the skin of his teeth spawns
-    NPC_WORGEN_RUNT_C2                                = 35456, // Quest - By the skin of his teeth spawns
-    NPC_SEAN_DEMPSEY                                  = 35081, // Quest - By the skin of his teeth controller= 35370,
-    NPC_JOSIAH_AVERY_P4                               = 35370, // NPC for worgen bite
-    NPC_JOSIAH_AVERY_TRIGGER                          = 50415, // Controller for Worgen Bite
-    NPC_LORNA_CROWLEY_P4                              = 35378, // Quest - From the Shadows
-    NPC_BLOODFANG_RIPPER_P4                           = 35505, // General AI spawns
-    NPC_GILNEAN_MASTIFF                               = 35631,
-    NPC_GILNEAS_CITY_GUARD_P8                         = 50474,
-    NPC_AFFLICTED_GILNEAN_P8                          = 50471,
-    NPC_COMMANDEERED_CANNON                           = 35914,
-    NPC_KRENNAN_ARANAS_TREE                           = 35753,
-    NPC_GREYMANE_HORSE_P4                             = 35905,
-    NPC_MOUNTAICE_HOURCE_CREDIT                       = 36560,
-};
+#include "SpellScript.h"
 
-enum QuestIds
-{
-    QUEST_LOCKDOWN                                     = 14078,
-    QUEST_EVAC_MERC_SQUA                               = 14098,
-    QUEST_SOMETHINGS_AMISS                             = 14091,
-    QUEST_ALL_HELL_BREAKS_LOOSE                        = 14093,
-    QUEST_ROYAL_ORDERS                                 = 14099,
-    QUEST_BY_THE_SKIN_ON_HIS_TEETH                     = 14154,
-    QUEST_SAVE_KRENNAN_ARANAS                          = 14293,
-    QUEST_SACRIFICES                                   = 14212,
-    QUEST_THE_REBEL_LORDS_ARSENAL                      = 14159,
-    QUEST_FROM_THE_SHADOWS                             = 14204
-};
 
-enum SpellIds
+enum Gilneas
 {
-    SPELL_ENRAGE                                       = 8599,
-    SPELL_FROSTBOLT_VISUAL_ONLY                        = 74277, // Dummy spell, visual only
-    SPELL_SUMMON_CROWLEY                               = 67004,
-    SPELL_RIDE_HORSE                                   = 43671,
-    SPELL_THROW_TORCH                                  = 67063,
-    SPELL_RIDE_VEHICLE_HARDCODED                       = 46598,
-    SPELL_LEFT_HOOK                                    = 67825,
-    SPELL_DEMORALIZING_SHOUT                           = 61044,
-    SPELL_SNAP_KICK                                    = 67827,
-    SPELL_BY_THE_SKIN_ON_HIS_TEETH                     = 66914,
-    SPELL_SHOOT                                        = 6660,
-    SPELL_WORGEN_BITE                                  = 72870,
-    SPELL_INFECTED_BITE                                = 72872,
-    SPELL_CANNON_FIRE                                  = 68235,
-    SPELL_GILNEAS_CANNON_CAMERA                        = 93555,
-    SPELL_SUMMON_JOSIAH_AVERY                          = 67350,
-    //SPELL_GET_SHOT                                     = 67349,
-    SPELL_SUMMON_JOSIAH                                = 67350,
-   
-    SPELL_PHASE_QUEST_2                                = 59073,
-    SPELL_SUMMON_GILNEAN_MASTIFF                       = 67807,
-    SPELL_DISMISS_GILNEAN_MASTIFF                      = 43511,
-    SPELL_ATTACK_LURKER                                = 67805,
-    SPELL_SHADOWSTALKER_STEALTH                        = 5916,
-    SPELL_PING_GILNEAN_CROW                            = 93275
-};
+    SPELL_PING_GILNEAN_CROW = 93275,
+    SPELL_SUMMON_RAVENOUS_WORGEN_1 = 66836,
+    SPELL_SUMMON_RAVENOUS_WORGEN_2 = 66925,
+    SPELL_SHOOT_INSTAKILL = 67593, // Visual problem
+    SPELL_COSMETIC_ATTACK = 69873,
+    SPELL_PULL_TO = 67357,
+    SPELL_GET_SHOT = 67349,
 
-enum NpcTextIds
-{
-    SAY_PRINCE_LIAM_GREYMANE_1                         = -1638000,
-    SAY_PRINCE_LIAM_GREYMANE_2                         = -1638001,
-    SAY_PRINCE_LIAM_GREYMANE_3                         = -1638002,
-    DELAY_SAY_PRINCE_LIAM_GREYMANE                     = 20000, // 20 seconds repetition time
+    EVENT_START_TALK_WITH_CITIZEN = 1,
+    EVENT_TALK_WITH_CITIZEN_1 = 2,
+    EVENT_TALK_WITH_CITIZEN_2 = 3,
+    EVENT_TALK_WITH_CITIZEN_3 = 4,
 
-    YELL_PRINCE_LIAM_GREYMANE_1                        = -1638025,
-    YELL_PRINCE_LIAM_GREYMANE_2                        = -1638026,
-    YELL_PRINCE_LIAM_GREYMANE_3                        = -1638027,
-    YELL_PRINCE_LIAM_GREYMANE_4                        = -1638028,
-    YELL_PRINCE_LIAM_GREYMANE_5                        = -1638029,
-    DELAY_YELL_PRINCE_LIAM_GREYMANE                    = 2000,
+    EVENT_START_DIALOG = 1,
+    EVENT_START_TALK_TO_GUARD = 2,
+    EVENT_TALK_TO_GUARD_1 = 3,
+    EVENT_TALK_TO_GUARD_2 = 4,
+    EVENT_RESET_DIALOG = 5,
+
+    PRINCE_LIAM_GREYMANE_TEXT_00 = 0,
+    PRINCE_LIAM_GREYMANE_TEXT_01 = 1,
+    PRINCE_LIAM_GREYMANE_TEXT_02 = 2,
+
+    EVENT_JUMP_TO_PRISON = 1,
+    EVENT_AGGRO_PLAYER = 2,
+    EVENT_FORCE_DESPAWN = 3,
+
+    EVENT_COSMETIC_ATTACK = 1,
+    EVENT_JUMP_TO_PLAYER = 2,
+    EVENT_SHOOT_JOSIAH = 3,
+
+    PHASE_ROOF = 0,
+    PHASE_COMBAT = 1,
+
+    WORGEN_ID_ROOF_1 = 0,
+    WORGEN_ID_ROOF_2 = 1,
+    WORGEN_ID_ROOF_3 = 2,
+    WORGEN_ID_ROOF_4 = 3,
+    WORGEN_ID_ROOF_5 = 4,
+    WORGEN_ID_ROOF_6 = 5,
+    WORGEN_ID_ROOF_7 = 6,
+
+    WORGEN_ID_CATHEDRAL_1 = 7,
+    WORGEN_ID_CATHEDRAL_2 = 8,
+    WORGEN_ID_CATHEDRAL_3 = 9,
+    WORGEN_ID_CATHEDRAL_4 = 10,
+    WORGEN_ID_CATHEDRAL_5 = 11,
+    WORGEN_ID_CATHEDRAL_6 = 12,
+    WORGEN_ID_CATHEDRAL_7 = 13,
+    WORGEN_ID_CATHEDRAL_8 = 14,
+    WORGEN_ID_CATHEDRAL_9 = 15,
+
+    NPC_PANICKED_CITIZEN_GATE = 44086,
+    NPC_WORGEN_RUNT = 35456,
+    NPC_WORGEN_RUNT_2 = 35188,
+    NPC_WORGEN_ALPHA = 35170,
+    NPC_WORGEN_ALPHA_2 = 35167,
+    NPC_LORNA_CROWLEY = 35378,
+    NPC_GENERIC_TRIGGER_LAB = 35374,
+
     SAY_JOSIAH_AVERY_1 = 0,
     SAY_JOSIAH_AVERY_2 = 1,
     SAY_JOSIAH_AVERY_3 = 2,
     SAY_JOSIAH_AVERY_4 = 3,
     SAY_JOSIAH_AVERY_5 = 4,
     SAY_JOSIAH_AVERY_6 = 5,
-    SAY_PANICKED_CITIZEN_1                             = -1638016,
-    SAY_PANICKED_CITIZEN_2                             = -1638017,
-    SAY_PANICKED_CITIZEN_3                             = -1638018,
-    SAY_PANICKED_CITIZEN_4                             = -1638019,
 
-    SAY_GILNEAS_CITY_GUARD_GATE_1                      = -1638022,
-    SAY_GILNEAS_CITY_GUARD_GATE_2                      = -1638023,
-    SAY_GILNEAS_CITY_GUARD_GATE_3                      = -1638024,
+    QUEST_FROM_THE_SHADOWS = 14204,
 
-    SAY_CITIZEN_1                                      = -1638003,
-    SAY_CITIZEN_2                                      = -1638004,
-    SAY_CITIZEN_3                                      = -1638005,
-    SAY_CITIZEN_4                                      = -1638006,
-    SAY_CITIZEN_5                                      = -1638007,
-    SAY_CITIZEN_6                                      = -1638008,
-    SAY_CITIZEN_7                                      = -1638009,
-    SAY_CITIZEN_8                                      = -1638010,
-    SAY_CITIZEN_1b                                     = -1638011,
-    SAY_CITIZEN_2b                                     = -1638012,
-    SAY_CITIZEN_3b                                     = -1638013,
-    SAY_CITIZEN_4b                                     = -1638014,
-    SAY_CITIZEN_5b                                     = -1638015,
-
-    SAY_KRENNAN_C2                                     = 0,
-    SAY_GREYMANE_HORSE                                 = 0,
-    SAY_CROWLEY_HORSE_1                                = 0,    // Let''s round up as many of them as we can.  Every worgen chasing us is one less worgen chasing the survivors!
-    SAY_CROWLEY_HORSE_2                                = 1,    // You'll never catch us, you blasted mongrels! || Come and get us, you motherless beasts! || Over here, you flea bags!
-    SAY_JOSIAH_AVERY_P2                                = 1,
-    SAY_JOSAIH_AVERY_P4                                = 1,
-    SAY_JOSAIH_AVERY_TRIGGER                           = 1,
-    SAY_LORNA_CROWLEY_P4                               = 0,
-    SAY_KING_GENN_GREYMANE_P4                          = 1,
-    SAY_GILNEAS_CITY_GUARD_P8                          = 1,
-    SAY_LORD_GODFREY_P4                                = 0,
-    SAY_NPC_KRENNAN_ARANAS_TREE                        = 0
-};
-enum gilnas
-{
     NPC_GILNEAS_MASTIFF = 35631,
-    SPELL_SUMMON_MASTIFF = 67807,
-    NPC_GENERIC_TRIGGER_LAB = 35374,
-    NPC_LORNA_CROWLEY = 35378,
-    SPELL_PULL_TO = 67357,
-    SPELL_GET_SHOT = 67349,
-    SPELL_COSMETIC_ATTACK = 69873,
-    SPELL_SHOOT_INSTAKILL = 67593, // Visual problem
-    EVENT_COSMETIC_ATTACK = 1,
-    EVENT_JUMP_TO_PLAYER = 2,
-    EVENT_SHOOT_JOSIAH = 3,
+    NPC_BLOODFANG_LURKER = 35463,
 
+    SPELL_SUMMON_MASTIFF = 67807,
+    SPELL_ATTACK_LURKER = 67805,
+    SPELL_SHADOWSTALKER_STEALTH = 5916,
+    SPELL_UNDYING_FRENZY = 80515,
+    SPELL_ENRAGE = 8599,
+
+    WORGEN_ENRAGE_EMOTE = 0,
+
+    QUEST_SAVE_KRENNAN_ARANAS = 14293,
+
+    NPC_KRENNAN_ARANAS = 35753,
+    NPC_KING_GREYMANES_HORSE = 35905,
+    NPC_BLOODFANG_RIPPER = 35505,
+    NPC_GILNEAS_CITY_GUARD = 35509,
+    NPC_KRENNAN_ARANAS_KILL_CREDIT = 35753,
+
+    TEXT_KRENNAN_ARANAS = 0,
+    EMOTE_SAVE_KRENNAN_ARANAS = 0,
+    TEXT_SAVED_KRENNAN_ARANAS = 0,
+
+    SPELL_GUARD_SHOOT = 48424,
+
+    EVENT_SEARCH_INVADER = 1,
+    EVENT_SEARCH_FOOTSOLDIER = 2,
+    EVENT_SEARCH_WATCHMAN = 3,
+
+    NPC_ENTRY_INVADER = 34511,
+    NPC_ENTRY_FOOTSOLDIER = 36236,
+    NPC_ENTRY_WATCHMAN = 36211,
+
+    EVENT_LAUNCH_BOULDER = 1,
+    EVENT_DESPAWN_CATAPULT = 2,
+    EVENT_CHECK_PASSENGER = 3,
+
+    SPELL_LAUNCH_BOULDER = 68591,
+
+    QUEST_ENTRY_TWO_BY_SEA = 14382,
+
+    NPC_CATAPULT_BOULDER_TRIGGER = 36286,
+
+    SPELL_SAVE_CYNTHIA = 68597,
+    SPELL_SAVE_ASHLEY = 68598,
+    SPELL_SAVE_JAMES = 68596,
+
+    PLAYER_SAY_CYNTHIA = 0,
+    PLAYER_SAY_ASHLEY = 1,
+    PLAYER_SAY_JAMES = 2,
+
+    NPC_JAMES = 36289,
+    NPC_CYNTHIA = 36287,
+    NPC_ASHLEY = 36288,
+
+    EVENT_TALK_TO_PLAYER = 1,
+    EVENT_START_RUN = 2,
+    EVENT_OPEN_DOOR = 3,
+    EVENT_RESUME_RUN = 4,
+    EVENT_CRY = 5,
+
+    CHILDREN_TEXT_ID = 0,
+
+    GO_DOOR_TO_THE_BASEMENT = 196411,
+
+    SPELL_CATCH_CAT = 68743,
+    SPELL_LUCIUS_SHOOT = 41440,
+
+    NPC_WAHL = 36458,
+    NPC_WAHL_WORGEN = 36852,
+    NPC_LUCIUS_THE_CRUEL = 36461,
+
+    SAY_THIS_CAT_IS_MINE = 0,
+    YELL_DONT_MESS = 0,
+
+    ACTION_SUMMON_LUCIUS = 1,
+    ACTION_CHANCE_DESPAWN = 2,
+    ACTION_CONTINUE_SCENE = 3,
+
+    POINT_CATCH_CHANCE = 4,
+
+    SPELL_ROUND_UP_HORSE = 68908,
+    SPELL_ROPE_CHANNEL = 68940,
+
+    EVENT_CHECK_LORNA = 1,
+    EVENT_CHECK_OWNER = 2,
+
+    NPC_LORNA_CROWLEY_2 = 36457,
+
+    QUEST_THE_HUNGRY_ETTIN = 14416,
+
+    QUEST_CREDIT_HORSE = 36560,
+
+    MUSIC_ENTRY_TELESCOPE = 23539,
+    PLAY_CINEMATIC_TELESCOPE = 167,
+
+    QUEST_ENTRY_EXODUS = 24438,
+
+    NPC_STAGECOACH_HARNESS = 38755,
+    NPC_HARNESS_SUMMONED = 43336,
+
+    EVENT_BOARD_HARNESS_OWNER = 1,
+
+    ACTION_START_WP = 1,
+
+    GO_FIRST_GATE = 196401,
+    GO_KINGS_GATE = 196412,
+
+    NPC_KOROTH_THE_HILLBREAKER = 36294,
+
+    ACTION_START_KOROTH_EVENT = 1,
+
+    SAY_KOROTH_THE_HILLBREAKER_1 = 0,
+    SAY_KOROTH_THE_HILLBREAKER_2 = 1
 };
-enum SoundIds
+
+
+enum CreatureIds
 {
-    SOUND_SWORD_FLESH                                 = 143,
-    SOUND_SWORD_PLATE                                 = 147,
-    SOUND_WORGEN_ATTACK                               = 558,
-    DELAY_SOUND                                       = 500,
-    DELAY_ANIMATE                                     = 2000
+    NPC_PRINCE_LIAM_GREYMANE = 34913,
+  
+    NPC_RAMPAGING_WORGEN_1 = 34884,
+    NPC_RAMPAGING_WORGEN_2 = 35660,
+    NPC_BLOODFANG_WORGEN = 35118,
+    NPC_SERGEANT_CLEESE = 35839,
+    NPC_MYRIAM_SPELLWALKER = 35872,
+    NPC_GILNEAN_ROYAL_GUARD = 35232,
+    NPC_FRIGHTENED_CITIZEN_1 = 34981,
+    NPC_FRIGHTENED_CITIZEN_2 = 35836,
+    NPC_DARIUS_CROWLEY = 35230,
+    NPC_NORTHGATE_REBEL_1 = 36057, // phase 8 outside cathedral
+    NPC_NORTHGATE_REBEL_2 = 41015, // phase 1024 inside cathedral
+    NPC_BLOODFANG_STALKER_C1 = 35229, // Main spawns
+    NPC_BLOODFANG_STALKER_C2 = 51277,
+    NPC_BLOODFANG_STALKER_CREDIT = 35582,
+    NPC_CROWLEY_HORSE = 35231,
+    NPC_LORD_DARIUS_CROWLEY_C1 = 35077, // Quest - By the skin of his teeth start/stop
+    NPC_WORGEN_ALPHA_C1 = 35170, // Quest - By the skin of his teeth spawns
+    NPC_WORGEN_ALPHA_C2 = 35167, // Quest - By the skin of his teeth spawns
+    NPC_WORGEN_RUNT_C1 = 35188, // Quest - By the skin of his teeth spawns
+    NPC_WORGEN_RUNT_C2 = 35456, // Quest - By the skin of his teeth spawns
+    NPC_SEAN_DEMPSEY = 35081, // Quest - By the skin of his teeth controller= 35370,
+    NPC_JOSIAH_AVERY_P4 = 35370, // NPC for worgen bite
+    NPC_JOSIAH_AVERY_TRIGGER = 50415, // Controller for Worgen Bite
+    NPC_LORNA_CROWLEY_P4 = 35378, // Quest - From the Shadows
+    NPC_BLOODFANG_RIPPER_P4 = 35505, // General AI spawns
+    NPC_GILNEAN_MASTIFF = 35631,
+    NPC_GILNEAS_CITY_GUARD_P8 = 50474,
+    NPC_AFFLICTED_GILNEAN_P8 = 50471,
+    NPC_COMMANDEERED_CANNON = 35914,
+    NPC_KRENNAN_ARANAS_TREE = 35753,
+    NPC_GREYMANE_HORSE_P4 = 35905,
+    NPC_MOUNTAICE_HOURCE_CREDIT = 36560,
 };
+
+enum QuestIds
+{
+    QUEST_LOCKDOWN = 14078,
+    QUEST_EVAC_MERC_SQUA = 14098,
+    QUEST_SOMETHINGS_AMISS = 14091,
+    QUEST_ALL_HELL_BREAKS_LOOSE = 14093,
+    QUEST_ROYAL_ORDERS = 14099,
+    QUEST_BY_THE_SKIN_ON_HIS_TEETH = 14154,
+   
+    QUEST_SACRIFICES = 14212,
+    QUEST_THE_REBEL_LORDS_ARSENAL = 14159,
+  
+};
+
+enum SpellIds
+{
+
+    SPELL_FROSTBOLT_VISUAL_ONLY = 74277, // Dummy spell, visual only
+    SPELL_SUMMON_CROWLEY = 67004,
+    SPELL_RIDE_HORSE = 43671,
+    SPELL_THROW_TORCH = 67063,
+    SPELL_RIDE_VEHICLE_HARDCODED = 46598,
+    SPELL_LEFT_HOOK = 67825,
+    SPELL_DEMORALIZING_SHOUT = 61044,
+    SPELL_SNAP_KICK = 67827,
+    SPELL_BY_THE_SKIN_ON_HIS_TEETH = 66914,
+    SPELL_SHOOT = 6660,
+    SPELL_WORGEN_BITE = 72870,
+    SPELL_INFECTED_BITE = 72872,
+    SPELL_CANNON_FIRE = 68235,
+    SPELL_GILNEAS_CANNON_CAMERA = 93555,
+    SPELL_SUMMON_JOSIAH_AVERY = 67350,
+   
+    SPELL_SUMMON_JOSIAH = 67350,
+  
+    SPELL_PHASE_QUEST_2 = 59073,
+    SPELL_SUMMON_GILNEAN_MASTIFF = 67807,
+    SPELL_DISMISS_GILNEAN_MASTIFF = 43511,
+   
+
+   
+};
+
 
 struct Waypoint
 {
     float X, Y, Z;
 };
 
-Waypoint NW_WAYPOINT_LOC1[2]=
+Waypoint NW_WAYPOINT_LOC1[2] =
 {
     { -1630.62f, 1480.55f, 70.40f }, // Worgen Runt 1 top edge of Roof Waypoint
     { -1636.01f, 1475.81f, 64.51f }  // Worgen Runt 1 Edge of Roof Waypoint
 };
 
-Waypoint NW_WAYPOINT_LOC2[2]=
+Waypoint NW_WAYPOINT_LOC2[2] =
 {
     { -1637.26f, 1488.86f, 69.95f }, // Worgen Runt 1 top edge of Roof Waypoint
     { -1642.45f, 1482.23f, 64.30f }  // Worgen Runt 1 Edge of Roof Waypoint
 };
 
-Waypoint SW_WAYPOINT_LOC1[2]=
+Waypoint SW_WAYPOINT_LOC1[2] =
 {
     { -1718.31f, 1526.62f, 55.91f }, // Worgen Runt 2 Corner where we turn
     { -1717.86f, 1490.77f, 56.61f }  // Worgen Runt 2 Edge of Roof Waypoint
 };
 
-Waypoint SW_WAYPOINT_LOC2[2]=
+Waypoint SW_WAYPOINT_LOC2[2] =
 {
     { -1718.31f, 1526.62f, 55.91f }, // Worgen Alpha 1 Corner where we turn
     { -1717.86f, 1487.00f, 57.07f }  // Worgen Alpha 1 Edge of Roof Waypoint
 };
 
-Waypoint N_WAYPOINT_LOC[1]=
+Waypoint N_WAYPOINT_LOC[1] =
 {
     { -1593.38f, 1408.02f, 72.64f } // Worgen Runt 2 Edge of Roof Waypoint
 };
 
-#define DELAY_EMOTE_PANICKED_CITIZEN                  urand(5000, 15000)   // 5-15 second time
-#define DELAY_SAY_PANICKED_CITIZEN                    urand(30000, 120000) // 30sec - 1.5min
-#define DELAY_SAY_GILNEAS_CITY_GUARD_GATE             urand(30000, 120000) // 30sec - 1.5min
-#define PATHS_COUNT_PANICKED_CITIZEN                  8
-#define CD_ENRAGE                                     30000
-#define SUMMON1_TTL                                   300000
-#define PATHS_COUNT                                   2
-#define DOOR_TIMER                                    30*IN_MILLISECONDS
-#define KRENNAN_END_X                                 -1772.4172f
-#define KRENNAN_END_Y                                 1430.6125f
-#define KRENNAN_END_Z                                 19.79f
-#define KRENNAN_END_O                                 2.79f
-#define CROWLEY_SPEED                                 1.85f // if set much lower than this, the horse automatically despawns before reaching the end of his waypoints
-#define AI_MIN_HP                                     85
+
+
+Position const runt2SummonJumpPos = { -1671.915f, 1446.734f, 52.28712f };
+Position const alphaSummonJumpPos = { -1656.723f, 1405.647f, 52.74205f };
+Position const alpha2SummonJumpPos = { -1675.44f, 1447.495f, 52.28762f };
+
+Position const josiahJumpPos = { -1796.63f, 1427.73f, 12.4624f };
+
+uint32 const runtHousePathSize1 = 13;
+
+Position const worgenRuntHousePath1[runtHousePathSize1] =
+{
+    { -1734.77f, 1527.007f, 55.2133f },
+    { -1729.345f, 1526.495f, 55.4231f },
+    { -1723.921f, 1525.982f, 55.6329f },
+    { -1718.885f, 1525.88f, 55.89785f },
+    { -1718.002f, 1516.054f, 55.36457f },
+    { -1718.162f, 1512.458f, 55.41572f },
+    { -1717.852f, 1508.871f, 55.64134f },
+    { -1717.868f, 1507.03f, 55.78084f },
+    { -1717.939f, 1498.912f, 56.2076f },
+    { -1717.975f, 1494.827f, 56.34147f },
+    { -1717.666f, 1491.978f, 56.46574f },
+    { -1717.708f, 1491.591f, 56.51286f },
+    { -1717.708f, 1491.591f, 56.51286f },
+};
+
+uint32 const runtHousePathSize2 = 11;
+
+Position const worgenRuntHousePath2[runtHousePathSize2] =
+{
+    {-1705.29f, 1527.974f, 57.49218f },
+    {-1709.63f, 1527.464f, 56.81163f },
+    {-1713.971f, 1526.953f, 56.13107f },
+    {-1718.249f, 1525.915f, 55.91631f },
+    {-1718.002f, 1516.054f, 55.36457f },
+    {-1718.162f, 1512.458f, 55.41572f },
+    {-1717.852f, 1508.871f, 55.64134f },
+    {-1717.866f, 1507.038f, 55.7804f },
+    {-1717.928f, 1498.872f, 56.20963f },
+    {-1717.947f, 1496.298f, 56.29393f },
+    {-1717.947f, 1496.298f, 56.29393f },
+};
+
+uint32 const runtHousePathSize3 = 8;
+
+Position const worgenRuntHousePath3[runtHousePathSize3] =
+{
+    {-1717.74f, 1514.99f, 55.37629f },
+    {-1717.75f, 1513.727f, 55.39608f },
+    {-1717.76f, 1512.465f, 55.41587f },
+    {-1717.787f, 1508.872f, 55.64124f },
+    {-1717.799f, 1507.277f, 55.74761f },
+    {-1717.864f, 1498.657f, 56.22049f },
+    {-1717.887f, 1495.557f, 56.31728f },
+    {-1717.887f, 1495.557f, 56.31728f },
+};
+
+uint32 const runtHousePathSize4 = 11;
+
+Position const worgenRuntHousePath4[runtHousePathSize4] =
+{
+    { -1727.101f, 1527.078f, 55.5045f },
+    { -1724.719f, 1526.731f, 55.60394f },
+    { -1722.337f, 1526.383f, 55.70337f },
+    { -1718.885f, 1525.88f, 55.89785f },
+    { -1718.002f, 1516.054f, 55.36457f },
+    { -1718.162f, 1512.458f, 55.41572f },
+    { -1717.852f, 1508.871f, 55.64134f },
+    { -1717.845f, 1507.113f, 55.77633f },
+    { -1717.81f, 1498.482f, 56.22932f },
+    { -1717.793f, 1494.123f, 56.37141f },
+    { -1717.793f, 1494.123f, 56.37141f },
+};
+
+uint32 const runtHousePathSize5 = 11;
+
+Position const worgenRuntHousePath5[runtHousePathSize5] =
+{
+    { -1709.699f, 1527.335f, 56.34836f },
+    { -1713.974f, 1526.625f, 56.13234f },
+    { -1718.249f, 1525.915f, 55.91631f },
+    { -1718.002f, 1516.054f, 55.36457f },
+    { -1718.162f, 1512.458f, 55.41572f },
+    { -1717.852f, 1508.871f, 55.64134f },
+    { -1717.891f, 1506.948f, 55.78529f },
+    { -1718.047f, 1499.267f, 56.18964f },
+    { -1718.125f, 1495.405f, 56.31914f },
+    { -1717.693f, 1492.178f, 56.45717f },
+    { -1717.693f, 1492.178f, 56.45717f },
+};
+
+uint32 const runtHousePathSize6 = 9;
+
+Position const worgenRuntHousePath6[runtHousePathSize6] =
+{
+    { -1718.083f, 1532.09f, 56.25435f },
+    { -1718.104f, 1524.071f, 55.80854f },
+    { -1718.125f, 1516.053f, 55.36273f },
+    { -1718.134f, 1512.459f, 55.41573f },
+    { -1718.143f, 1508.866f, 55.64067f },
+    { -1718.151f, 1506.013f, 55.83052f },
+    { -1718.167f, 1499.665f, 56.16953f },
+    { -1718.172f, 1497.578f, 56.24289f },
+    { -1718.172f, 1497.578f, 56.24289f },
+};
+
+uint32 const runtHousePathSize7 = 9;
+
+Position const worgenRuntHousePath7[runtHousePathSize7] =
+{
+    { -1718.083f, 1532.09f, 56.25435f },
+    { -1718.104f, 1524.071f, 55.80854f },
+    { -1718.125f, 1516.053f, 55.36273f },
+    { -1718.134f, 1512.459f, 55.41573f },
+    { -1718.143f, 1508.866f, 55.64067f },
+    { -1718.151f, 1506.013f, 55.83052f },
+    { -1718.167f, 1499.665f, 56.16953f },
+    { -1718.172f, 1497.578f, 56.24289f },
+    { -1718.172f, 1497.578f, 56.24289f },
+};
+
+uint32 const runtCathedralPathSize1 = 10;
+
+Position const worgenRuntCathedralPath1[runtCathedralPathSize1] =
+{
+    { -1612.885f, 1492.154f, 67.03599f },
+    { -1618.054f, 1489.644f, 68.5475f },
+    { -1623.222f, 1487.134f, 70.05901f },
+    { -1629.727f, 1483.976f, 72.59077f },
+    { -1630.914f, 1483.4f, 72.92308f },
+    { -1632.244f, 1482.754f, 72.91827f },
+    { -1636.865f, 1480.51f, 68.61356f },
+    { -1638.087f, 1479.916f, 67.58314f },
+    { -1638.852f, 1479.545f, 66.56925f },
+    { -1638.852f, 1479.545f, 66.56925f },
+};
+
+uint32 const runtCathedralPathSize2 = 7;
+
+Position const worgenRuntCathedralPath2[runtCathedralPathSize2] =
+{
+    { -1618.982f, 1489.76f, 68.56043f },
+    { -1625.62f, 1487.033f, 71.4378f },
+    { -1632.258f, 1484.306f, 74.31516f },
+    { -1634.6f, 1483.343f, 72.61462f },
+    { -1636.067f, 1482.741f, 70.69682f },
+    { -1639.282f, 1481.42f, 66.99659f },
+    { -1639.282f, 1481.42f, 66.99659f },
+};
+
+uint32 const runtCathedralPathSize3 = 6;
+
+Position const worgenRuntCathedralPath3[runtCathedralPathSize3] =
+{
+    { -1637.957f, 1493.445f, 67.77746f },
+    { -1638.569f, 1489.736f, 68.47077f },
+    { -1639.182f, 1486.027f, 69.16409f },
+    { -1640.578f, 1477.564f, 64.01109f },
+    { -1640.676f, 1476.976f, 63.45144f },
+    { -1640.676f, 1476.976f, 63.45144f },
+};
+
+uint32 const runtCathedralPathSize4 = 5;
+
+Position const worgenRuntCathedralPath4[runtCathedralPathSize4] =
+{
+    { -1628.66f, 1482.281f, 71.34027f },
+    { -1630.399f, 1481.66f, 71.33196f },
+    { -1632.139f, 1481.039f, 71.32365f },
+    { -1639.006f, 1478.586f, 65.77306f },
+    { -1639.006f, 1478.586f, 65.77306f },
+};
+
+
+uint32 const runtCathedralPathSize5 = 9;
+
+Position const worgenRuntCathedralPath5[runtCathedralPathSize5] =
+{
+    { -1620.279f, 1484.46f, 67.03528f },
+    { -1622.424f, 1483.882f, 68.05564f },
+    { -1624.568f, 1483.304f, 69.076f },
+    { -1628.933f, 1482.127f, 70.91297f },
+    { -1632.153f, 1481.259f, 71.52889f },
+    { -1637.776f, 1479.743f, 67.45475f },
+    { -1638.956f, 1479.425f, 66.41499f },
+    { -1639.354f, 1479.318f, 65.98292f },
+    { -1639.354f, 1479.318f, 65.98292f },
+};
+
+uint32 const runtCathedralPathSize6 = 10;
+
+Position const worgenRuntCathedralPath6[runtCathedralPathSize6] =
+{
+    { -1633.998f, 1495.233f, 68.24403f },
+    { -1634.344f, 1491.3f, 70.41303f },
+    { -1634.689f, 1487.368f, 72.58203f },
+    { -1634.735f, 1486.842f, 72.91134f },
+    { -1634.837f, 1485.684f, 73.20835f },
+    { -1634.987f, 1483.981f, 72.29824f },
+    { -1635.084f, 1482.868f, 71.9163f },
+    { -1635.166f, 1481.939f, 70.77574f },
+    { -1635.809f, 1474.621f, 63.4636f },
+    { -1635.809f, 1474.621f, 63.4636f },
+};
+
+uint32 const runtCathedralPathSize7 = 7;
+
+Position const worgenRuntCathedralPath7[runtCathedralPathSize7] =
+{
+    { -1629.975f, 1494.066f, 70.64719f },
+    { -1631.979f, 1491.585f, 71.31316f },
+    { -1633.984f, 1489.104f, 71.97912f },
+    { -1634.991f, 1487.856f, 72.09129f },
+    { -1636.631f, 1485.826f, 71.53807f },
+    { -1640.601f, 1480.912f, 65.49457f },
+    { -1640.601f, 1480.912f, 65.49457f },
+};
+
+uint32 const runtCathedralPathSize8 = 8;
+
+Position const worgenRuntCathedralPath8[runtCathedralPathSize8] =
+{
+    { -1620.879f, 1491.133f, 70.67613f },
+    { -1622.665f, 1489.818f, 71.04526f },
+    { -1624.451f, 1488.503f, 71.41438f },
+    { -1630.469f, 1484.073f, 73.09648f },
+    { -1631.376f, 1483.405f, 73.20229f },
+    { -1632.245f, 1482.765f, 72.92912f },
+    { -1635.605f, 1480.292f, 68.99215f },
+    { -1635.605f, 1480.292f, 68.99215f },
+};
+
+Position const worgenRuntJumpPos[] =
+{
+    { -1694.03f, 1466.33f, 52.2872f },
+    { -1688.92f, 1455.69f, 52.2871f },
+    { -1699.46f, 1468.43f, 52.2871f },
+    { -1697.73f, 1469.52f, 52.2871f },
+    { -1701.65f, 1470.94f, 52.2871f },
+    { -1693.91f, 1468.46f, 52.2872f },
+    { -1697.30f, 1464.65f, 52.2871f },
+
+    { -1681.57f, 1455.77f, 52.2871f },
+    { -1677.47f, 1454.94f, 52.2871f },
+    { -1677.71f, 1452.2f,  52.2871f },
+    { -1677.66f, 1450.93f, 52.2871f },
+    { -1672.56f, 1448.06f, 52.2871f },
+    { -1683.13f, 1455.39f, 52.2871f },
+    { -1669.81f, 1442.34f, 52.2871f },
+    { -1674.15f, 1448.9f,  52.2871f },
+};
+
+Position const WorgenRuntHousePos[] =
+{
+    { -1729.345f, 1526.495f, 55.47962f, 6.188943f },
+    { -1709.63f, 1527.464f, 56.86086f, 3.258752f },
+    { -1717.75f, 1513.727f, 55.47941f, 4.704845f },
+    { -1724.719f, 1526.731f, 55.66177f, 6.138319f },
+    { -1713.974f, 1526.625f, 56.21981f, 3.306195f },
+    { -1718.104f, 1524.071f, 55.81641f, 4.709816f },
+    { -1718.262f, 1518.557f, 55.55954f, 4.726997f },
+
+    { -1618.054f, 1489.644f, 68.45153f, 3.593639f },
+    { -1625.62f, 1487.033f, 71.27762f, 3.531424f },
+    { -1638.569f, 1489.736f, 68.55273f, 4.548815f },
+    { -1630.399f, 1481.66f, 71.41516f, 3.484555f },
+    { -1622.424f, 1483.882f, 67.67381f, 3.404875f },
+    { -1634.344f, 1491.3f, 70.10101f, 4.6248f },
+    { -1631.979f, 1491.585f, 71.11481f, 4.032866f },
+    { -1627.273f, 1499.689f, 68.89395f, 4.251452f },
+    { -1622.665f, 1489.818f, 71.03797f, 3.776179f },
+};
+
+uint8 const JamesPathLenght = 6;
+Position const JamesPath[][JamesPathLenght] =
+{
+    {
+        { -1925.925049f, 2539.176514f, 1.392833f, 0.0f },
+        { -1913.658203f, 2545.986328f, 1.465530f, 0.0f },
+        { -1904.370728f, 2552.793213f, 1.132485f, 0.0f },
+        { -1900.970459f, 2550.849365f, 0.714445f, 0.0f },
+        { -1886.868774f, 2540.282471f, 1.706371f, 0.0f },
+        { -1882.739746f, 2543.941865f, 1.628683f, 0.0f },
+    },
+};
+
+uint8 const CynthiaPathLenght = 6;
+Position const CynthiaPath[][CynthiaPathLenght] =
+{
+    {
+        { -1947.965088f, 2518.669434f, 1.826697f, 0.0f },
+        { -1923.350830f, 2521.841553f, 1.586985f, 0.0f },
+        { -1917.197632f, 2520.494385f, 2.297501f, 0.0f },
+        { -1890.082031f, 2519.952148f, 1.425827f, 0.0f },
+        { -1886.868774f, 2540.282471f, 1.706371f, 0.0f },
+        { -1882.739746f, 2543.941865f, 1.628683f, 0.0f },
+    },
+};
+
+uint8 const AshleyPathLenght = 13;
+Position const AshleyPath[][AshleyPathLenght] =
+{
+    {
+        { -1928.023682f, 2558.467285f, 12.733648f, 0.0f },
+        { -1928.248901f, 2553.930176f, 12.734390f, 0.0f },
+        { -1923.981567f, 2552.113770f, 12.736046f, 0.0f },
+        { -1919.301514f, 2563.295166f, 3.579522f, 0.0f },
+        { -1930.442017f, 2562.145996f, 3.579824f, 0.0f },
+        { -1941.160156f, 2566.118896f, 1.392157f, 0.0f },
+        { -1940.852295f, 2543.049072f, 1.392157f, 0.0f },
+        { -1919.504517f, 2543.273926f, 1.392157f, 0.0f },
+        { -1913.658203f, 2545.986328f, 1.465530f, 0.0f },
+        { -1904.370728f, 2552.793213f, 1.132485f, 0.0f },
+        { -1900.970459f, 2550.849365f, 0.714445f, 0.0f },
+        { -1886.868774f, 2540.282471f, 1.706371f, 0.0f },
+        { -1882.739746f, 2543.941865f, 1.628683f, 0.0f },
+    },
+};
+
+uint8 const childrenBasementPathLenght = 3;
+Position const childrenBasementPath[][childrenBasementPathLenght] =
+{
+    {
+        { -1879.062378f, 2546.958984f, -0.130342f, 0.0f },
+        { -1873.854980f, 2550.903564f, -5.898719f, 0.0f },
+        { -1868.589844f, 2536.521240f, -6.365717f, 0.0f },
+    },
+};
+
+uint8 const KorothPathLenght = 2;
+Position const KorothPath[][KorothPathLenght] =
+{
+    {
+        { -2271.431f, 1963.941f, 99.342613f, 0.0f },
+        { -2284.237f, 1963.801f, 95.656654f, 0.0f },
+    },
+};
+
+const std::string PlayerText[3] =
+{
+    "It's not safe here. Go to the Allens' basement.",
+    "Join the others inside the basement next door. Hurry!",
+    "Your mother's in the basement next door. Get to her now!",
+};
+
+struct npc_gilneas_crow : public ScriptedAI
+{
+    npc_gilneas_crow(Creature* creature) : ScriptedAI(creature) {}
+
+    uint32 spawn;
+    bool flying;
+
+    void Reset() override
+    {
+        flying = false;
+        spawn = 0;
+        me->SetPosition(me->GetCreatureData()->posX, me->GetCreatureData()->posY, me->GetCreatureData()->posZ, me->GetCreatureData()->orientation);
+    }
+
+    void SpellHit(Unit* /*caster*/, const SpellInfo* spell) override
+    {
+        if (spell->Id == SPELL_PING_GILNEAN_CROW)
+        {
+            if (!flying)
+            {
+                me->SetStandState(UNIT_STAND_STATE_STAND);
+                me->SetDisableGravity(true);
+                flying = true;
+            }
+        }
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!flying)
+            return;
+
+        if (spawn <= diff)
+        {
+            me->GetMotionMaster()->MovePoint(0, (me->GetPositionX() + irand(-15, 15)), (me->GetPositionY() + irand(-15, 15)), (me->GetPositionZ() + irand(5, 15)));
+            spawn = urand(500, 1000);
+        }
+        else spawn -= diff;
+
+        if ((me->GetPositionZ() - me->GetCreatureData()->posZ) >= 20.0f)
+        {
+            me->DisappearAndDie();
+            me->RemoveCorpse(true);
+            flying = false;
+        }
+    }
+};
+
+struct npc_gilneas_city_guard_gate : public ScriptedAI
+{
+    npc_gilneas_city_guard_gate(Creature* creature)
+        : ScriptedAI(creature), m_say(0), m_emote(0) // <-- initialize both here
+    {
+    }
+
+    EventMap m_events;
+    uint8 m_say;
+    uint8 m_emote;
+    ObjectGuid m_citizenGUID;
+
+    void Reset() override
+    {
+        if (me->GetDistance2d(-1430.47f, 1345.55f) < 10.0f)
+            m_events.ScheduleEvent(EVENT_START_TALK_WITH_CITIZEN, urand(10000, 30000));
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        m_events.Update(diff);
+
+        while (uint32 eventId = m_events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+            case EVENT_START_TALK_WITH_CITIZEN:
+            {
+                m_citizenGUID = GetRandomCitizen();
+                m_emote = RAND(EMOTE_ONESHOT_COWER, EMOTE_STATE_TALK, EMOTE_ONESHOT_CRY, EMOTE_ONESHOT_BEG, EMOTE_ONESHOT_EXCLAMATION, EMOTE_ONESHOT_POINT);
+                m_say = 0;
+
+                if (Creature* npc = ObjectAccessor::GetCreature(*me, m_citizenGUID))
+                    npc->HandleEmoteCommand(m_emote);
+               
+                m_events.ScheduleEvent(EVENT_TALK_WITH_CITIZEN_1, urand(2000, 3000));
+                break;
+            }
+            case EVENT_TALK_WITH_CITIZEN_1:
+            {
+                if (Creature* npc = ObjectAccessor::GetCreature(*me, m_citizenGUID))
+                    npc->AI()->Talk(m_say);
+
+                m_events.ScheduleEvent(EVENT_TALK_WITH_CITIZEN_2, 5000);
+                break;
+            }
+            case EVENT_TALK_WITH_CITIZEN_2:
+            {
+                Talk(m_say);
+                m_events.ScheduleEvent(EVENT_TALK_WITH_CITIZEN_3, 5000);
+                break;
+            }
+            case EVENT_TALK_WITH_CITIZEN_3:
+            {
+                if (Creature* npc = ObjectAccessor::GetCreature(*me, m_citizenGUID))
+                    npc->HandleEmoteCommand(EMOTE_STATE_NONE);
+
+                m_events.ScheduleEvent(EVENT_START_TALK_WITH_CITIZEN, urand(5000, 30000));
+                break;
+            }
+            }
+        }
+
+        if (!UpdateVictim())
+            return;
+
+        DoMeleeAttackIfReady();
+    }
+
+    void FillCitizenList()
+    {
+        listOfCitizenGUID.clear();
+        std::list<Creature*> listOfCitizen;
+        me->GetCreatureListWithEntryInGrid(listOfCitizen, NPC_PANICKED_CITIZEN_GATE, 35.0f);
+
+        for (std::list<Creature*>::iterator itr = listOfCitizen.begin(); itr != listOfCitizen.end(); ++itr)
+            listOfCitizenGUID.push_back((*itr)->GetGUID());
+    }
+
+    ObjectGuid GetRandomCitizen()
+    {
+        if (listOfCitizenGUID.empty())
+            FillCitizenList();
+
+        uint8 rol = urand(0, listOfCitizenGUID.size() - 1);
+        std::list<ObjectGuid>::iterator itr = listOfCitizenGUID.begin();
+        std::advance(itr, rol);
+        return (*itr);
+    }
+
+private:
+    std::list<ObjectGuid> listOfCitizenGUID;
+};
+
+struct npc_prince_liam_greymane : public ScriptedAI
+{
+    npc_prince_liam_greymane(Creature* c) : ScriptedAI(c) {}
+
+    EventMap _events;
+
+    void Reset() override
+    {
+        _events.RescheduleEvent(EVENT_START_DIALOG, 1000);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        _events.Update(diff);
+
+        while (uint32 eventId = _events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+            case EVENT_START_DIALOG:
+            {
+                _events.ScheduleEvent(EVENT_RESET_DIALOG, 120000);
+                _events.ScheduleEvent(EVENT_START_TALK_TO_GUARD, 1000);
+                break;
+            }
+            case EVENT_START_TALK_TO_GUARD:
+            {
+                Talk(PRINCE_LIAM_GREYMANE_TEXT_00);
+                _events.ScheduleEvent(EVENT_TALK_TO_GUARD_1, 15000);
+                break;
+            }
+            case EVENT_TALK_TO_GUARD_1:
+            {
+                Talk(PRINCE_LIAM_GREYMANE_TEXT_01);
+                _events.ScheduleEvent(EVENT_TALK_TO_GUARD_2, 18000);
+                break;
+            }
+            case EVENT_TALK_TO_GUARD_2:
+            {
+                Talk(PRINCE_LIAM_GREYMANE_TEXT_02);
+                break;
+            }
+            case EVENT_RESET_DIALOG:
+            {
+                Reset();
+                break;
+            }
+            }
+        }
+
+        if (!UpdateVictim())
+            return;
+
+        DoMeleeAttackIfReady();
+    }
+};
 #define Event_Time                                    118500
 #define WORGEN_EVENT_SPAWNTIME                        20000 // Default Despawn Timer
 #define NW_ROOF_SPAWN_LOC_1                           -1618.86f, 1505.68f, 70.24f, 3.91f
@@ -236,6 +883,7 @@ Waypoint N_WAYPOINT_LOC[1]=
 #define N_ROOF_SPAWN_LOC                              -1562.59f, 1409.35f, 71.66f, 3.16f
 #define PLATFORM_Z                                    52.29f
 
+
 class npc_sean_dempsey : public CreatureScript
 {
 public:
@@ -243,7 +891,7 @@ public:
 
     CreatureAI* GetAI(Creature* creature) const
     {
-        return new npc_sean_dempseyAI (creature);
+        return new npc_sean_dempseyAI(creature);
     }
 
     struct npc_sean_dempseyAI : public ScriptedAI
@@ -256,11 +904,11 @@ public:
 
         void Reset()
         {
-            EventActive      = false;
-            RunOnce          = true;
-            tSummon          = 0;
-            tEvent_Timer     = 0;
-            tWave_Time       = urand(9000, 15000); // How often we spawn
+            EventActive = false;
+            RunOnce = true;
+            tSummon = 0;
+            tEvent_Timer = 0;
+            tWave_Time = urand(9000, 15000); // How often we spawn
         }
 
         void SummonNextWave()
@@ -277,34 +925,34 @@ public:
                 }
                 else
                 {
-                    switch (urand (1,5)) // After intial wave, wave spawns should be random
+                    switch (urand(1, 5)) // After intial wave, wave spawns should be random
                     {
-                        case 1: // One Alpha on SW Roof and One Alpha on NW Roof
-                            me->SummonCreature(NPC_WORGEN_ALPHA_C2, SW_ROOF_SPAWN_LOC_1, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
-                            me->SummonCreature(NPC_WORGEN_ALPHA_C1, NW_ROOF_SPAWN_LOC_1, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
-                            break;
+                    case 1: // One Alpha on SW Roof and One Alpha on NW Roof
+                        me->SummonCreature(NPC_WORGEN_ALPHA_C2, SW_ROOF_SPAWN_LOC_1, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
+                        me->SummonCreature(NPC_WORGEN_ALPHA_C1, NW_ROOF_SPAWN_LOC_1, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
+                        break;
 
-                        case 2: // 8 Runts on NW Roof
-                            for (int i = 0; i < 5; i++)
-                                me->SummonCreature(NPC_WORGEN_RUNT_C1, NW_ROOF_SPAWN_LOC_1, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
-                                me->SummonCreature(NPC_WORGEN_RUNT_C1, NW_ROOF_SPAWN_LOC_2, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
-                            break;
+                    case 2: // 8 Runts on NW Roof
+                        for (int i = 0; i < 5; i++)
+                            me->SummonCreature(NPC_WORGEN_RUNT_C1, NW_ROOF_SPAWN_LOC_1, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
+                        me->SummonCreature(NPC_WORGEN_RUNT_C1, NW_ROOF_SPAWN_LOC_2, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
+                        break;
 
-                        case 3: // 8 Runts on SW Roof
-                            for (int i = 0; i < 5; i++)
-                                me->SummonCreature(NPC_WORGEN_RUNT_C2, SW_ROOF_SPAWN_LOC_1, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
-                                me->SummonCreature(NPC_WORGEN_RUNT_C2, SW_ROOF_SPAWN_LOC_2, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
-                            break;
+                    case 3: // 8 Runts on SW Roof
+                        for (int i = 0; i < 5; i++)
+                            me->SummonCreature(NPC_WORGEN_RUNT_C2, SW_ROOF_SPAWN_LOC_1, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
+                        me->SummonCreature(NPC_WORGEN_RUNT_C2, SW_ROOF_SPAWN_LOC_2, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
+                        break;
 
-                        case 4: // One Alpha on SW Roof and One Alpha on N Roof
-                            me->SummonCreature(NPC_WORGEN_ALPHA_C2, SW_ROOF_SPAWN_LOC_1, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
-                            me->SummonCreature(NPC_WORGEN_ALPHA_C1, N_ROOF_SPAWN_LOC, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
-                            break;
-                        case 5: // 8 Runts - Half NW and Half SW
-                            for (int i = 0; i < 5; i++)
-                                me->SummonCreature(NPC_WORGEN_RUNT_C2, SW_ROOF_SPAWN_LOC_1, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
-                                me->SummonCreature(NPC_WORGEN_RUNT_C1, NW_ROOF_SPAWN_LOC_2, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
-                            break;
+                    case 4: // One Alpha on SW Roof and One Alpha on N Roof
+                        me->SummonCreature(NPC_WORGEN_ALPHA_C2, SW_ROOF_SPAWN_LOC_1, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
+                        me->SummonCreature(NPC_WORGEN_ALPHA_C1, N_ROOF_SPAWN_LOC, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
+                        break;
+                    case 5: // 8 Runts - Half NW and Half SW
+                        for (int i = 0; i < 5; i++)
+                            me->SummonCreature(NPC_WORGEN_RUNT_C2, SW_ROOF_SPAWN_LOC_1, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
+                        me->SummonCreature(NPC_WORGEN_RUNT_C1, NW_ROOF_SPAWN_LOC_2, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, WORGEN_EVENT_SPAWNTIME);
+                        break;
                     }
                 }
             }
@@ -338,6 +986,7 @@ public:
     };
 };
 
+
 /*######
 ## npc_lord_darius_crowley_c1
 ######*/
@@ -363,7 +1012,7 @@ public:
 
     CreatureAI* GetAI(Creature* creature) const
     {
-        return new npc_lord_darius_crowley_c1AI (creature);
+        return new npc_lord_darius_crowley_c1AI(creature);
     }
 
     struct npc_lord_darius_crowley_c1AI : public ScriptedAI
@@ -379,10 +1028,10 @@ public:
 
         void UpdateAI(uint32 diff)
         {
-        if (!UpdateVictim())
+            if (!UpdateVictim())
             {
                 // Reset home if no target
-                me->GetMotionMaster()->MoveCharge(me->GetHomePosition().GetPositionX(),me->GetHomePosition().GetPositionY(),me->GetHomePosition().GetPositionZ(),8.0f);
+                me->GetMotionMaster()->MoveCharge(me->GetHomePosition().GetPositionX(), me->GetHomePosition().GetPositionY(), me->GetHomePosition().GetPositionZ(), 8.0f);
                 me->SetOrientation(me->GetHomePosition().GetOrientation()); // Reset to my original orientation
                 return;
             }
@@ -393,25 +1042,25 @@ public:
                 {
                     switch (urand(0, 2)) // Perform one of 3 random attacks
                     {
-                        case 0: // Do Left Hook
-                            if (me->GetOrientation() > 2.0f && me->GetOrientation() < 3.0f || me->GetOrientation() > 5.0f && me->GetOrientation() < 6.0f) 
-                                // If Orientation is outside of these ranges, there is a possibility the knockback could knock worgens off the platform
-                                // After which, Crowley would chase
-                            {
-                                DoCast(me->GetVictim(), SPELL_LEFT_HOOK, true);
-                            }
-                                tAttack = urand(1700, 2400);
-                            break;
+                    case 0: // Do Left Hook
+                        if (me->GetOrientation() > 2.0f && me->GetOrientation() < 3.0f || me->GetOrientation() > 5.0f && me->GetOrientation() < 6.0f)
+                            // If Orientation is outside of these ranges, there is a possibility the knockback could knock worgens off the platform
+                            // After which, Crowley would chase
+                        {
+                            DoCast(me->GetVictim(), SPELL_LEFT_HOOK, true);
+                        }
+                        tAttack = urand(1700, 2400);
+                        break;
 
-                        case 1: // Do Demoralizing Shout
-                            DoCast(me->GetVictim(), SPELL_DEMORALIZING_SHOUT, true);
-                            tAttack = urand(1700, 2400);
-                            break;
+                    case 1: // Do Demoralizing Shout
+                        DoCast(me->GetVictim(), SPELL_DEMORALIZING_SHOUT, true);
+                        tAttack = urand(1700, 2400);
+                        break;
 
-                        case 2: // Do Snap Kick
-                            DoCast(me->GetVictim(), SPELL_SNAP_KICK, true);
-                            tAttack = urand(1700, 2400);
-                            break;
+                    case 2: // Do Snap Kick
+                        DoCast(me->GetVictim(), SPELL_SNAP_KICK, true);
+                        tAttack = urand(1700, 2400);
+                        break;
                     }
                 }
                 else
@@ -429,7 +1078,7 @@ public:
 /*######
 ## npc_worgen_runt_c1
 ######*/
-
+#define CD_ENRAGE                                     30000
 class npc_worgen_runt_c1 : public CreatureScript
 {
 public:
@@ -437,7 +1086,7 @@ public:
 
     CreatureAI* GetAI(Creature* creature) const
     {
-        return new npc_worgen_runt_c1AI (creature);
+        return new npc_worgen_runt_c1AI(creature);
     }
 
     struct npc_worgen_runt_c1AI : public ScriptedAI
@@ -449,10 +1098,10 @@ public:
 
         void Reset()
         {
-            Run = Loc1 = Loc2 = Combat= Jump = false;
-            WaypointId          = 0;
-            tEnrage             = 0;
-            willCastEnrage      = urand(0, 1);
+            Run = Loc1 = Loc2 = Combat = Jump = false;
+            WaypointId = 0;
+            tEnrage = 0;
+            willCastEnrage = urand(0, 1);
         }
 
         void UpdateAI(uint32 diff)
@@ -473,12 +1122,12 @@ public:
                 if (Loc1) // If I was spawned in Location 1
                 {
                     if (WaypointId < 2)
-                        me->GetMotionMaster()->MovePoint(WaypointId,NW_WAYPOINT_LOC1[WaypointId].X, NW_WAYPOINT_LOC1[WaypointId].Y, NW_WAYPOINT_LOC1[WaypointId].Z);
+                        me->GetMotionMaster()->MovePoint(WaypointId, NW_WAYPOINT_LOC1[WaypointId].X, NW_WAYPOINT_LOC1[WaypointId].Y, NW_WAYPOINT_LOC1[WaypointId].Z);
                 }
                 else if (Loc2)// If I was spawned in Location 2
                 {
                     if (WaypointId < 2)
-                        me->GetMotionMaster()->MovePoint(WaypointId,NW_WAYPOINT_LOC2[WaypointId].X, NW_WAYPOINT_LOC2[WaypointId].Y, NW_WAYPOINT_LOC2[WaypointId].Z);
+                        me->GetMotionMaster()->MovePoint(WaypointId, NW_WAYPOINT_LOC2[WaypointId].X, NW_WAYPOINT_LOC2[WaypointId].Y, NW_WAYPOINT_LOC2[WaypointId].Z);
                 }
             }
 
@@ -527,14 +1176,14 @@ public:
 
             if (Loc1)
             {
-                CommonWPCount = sizeof(NW_WAYPOINT_LOC1)/sizeof(Waypoint); // Count our waypoints
+                CommonWPCount = sizeof(NW_WAYPOINT_LOC1) / sizeof(Waypoint); // Count our waypoints
             }
             else if (Loc2)
             {
-                CommonWPCount = sizeof(NW_WAYPOINT_LOC2)/sizeof(Waypoint); // Count our waypoints
+                CommonWPCount = sizeof(NW_WAYPOINT_LOC2) / sizeof(Waypoint); // Count our waypoints
             }
 
-            WaypointId = PointId+1; // Increase to next waypoint
+            WaypointId = PointId + 1; // Increase to next waypoint
 
             if (WaypointId >= CommonWPCount) // If we have reached the last waypoint
             {
@@ -567,7 +1216,7 @@ public:
 
     CreatureAI* GetAI(Creature* creature) const
     {
-        return new npc_worgen_runt_c2AI (creature);
+        return new npc_worgen_runt_c2AI(creature);
     }
 
     struct npc_worgen_runt_c2AI : public ScriptedAI
@@ -579,10 +1228,10 @@ public:
 
         void Reset()
         {
-            Run = Loc1 = Loc2 = Combat= Jump = false;
-            WaypointId          = 0;
-            tEnrage             = 0;
-            willCastEnrage      = urand(0, 1);
+            Run = Loc1 = Loc2 = Combat = Jump = false;
+            WaypointId = 0;
+            tEnrage = 0;
+            willCastEnrage = urand(0, 1);
         }
 
         void UpdateAI(uint32 diff)
@@ -603,12 +1252,12 @@ public:
                 if (Loc1) // If I was spawned in Location 1
                 {
                     if (WaypointId < 2)
-                        me->GetMotionMaster()->MovePoint(WaypointId,SW_WAYPOINT_LOC1[WaypointId].X, SW_WAYPOINT_LOC1[WaypointId].Y, SW_WAYPOINT_LOC1[WaypointId].Z);
+                        me->GetMotionMaster()->MovePoint(WaypointId, SW_WAYPOINT_LOC1[WaypointId].X, SW_WAYPOINT_LOC1[WaypointId].Y, SW_WAYPOINT_LOC1[WaypointId].Z);
                 }
                 else if (Loc2)// If I was spawned in Location 2
                 {
                     if (WaypointId < 2)
-                        me->GetMotionMaster()->MovePoint(WaypointId,SW_WAYPOINT_LOC2[WaypointId].X, SW_WAYPOINT_LOC2[WaypointId].Y, SW_WAYPOINT_LOC2[WaypointId].Z);
+                        me->GetMotionMaster()->MovePoint(WaypointId, SW_WAYPOINT_LOC2[WaypointId].X, SW_WAYPOINT_LOC2[WaypointId].Y, SW_WAYPOINT_LOC2[WaypointId].Z);
                 }
             }
 
@@ -657,14 +1306,14 @@ public:
 
             if (Loc1)
             {
-                CommonWPCount = sizeof(SW_WAYPOINT_LOC1)/sizeof(Waypoint); // Count our waypoints
+                CommonWPCount = sizeof(SW_WAYPOINT_LOC1) / sizeof(Waypoint); // Count our waypoints
             }
             else if (Loc2)
             {
-                CommonWPCount = sizeof(SW_WAYPOINT_LOC2)/sizeof(Waypoint); // Count our waypoints
+                CommonWPCount = sizeof(SW_WAYPOINT_LOC2) / sizeof(Waypoint); // Count our waypoints
             }
 
-            WaypointId = PointId+1; // Increase to next waypoint
+            WaypointId = PointId + 1; // Increase to next waypoint
 
             if (WaypointId >= CommonWPCount) // If we have reached the last waypoint
             {
@@ -697,7 +1346,7 @@ public:
 
     CreatureAI* GetAI(Creature* creature) const
     {
-        return new npc_worgen_alpha_c1AI (creature);
+        return new npc_worgen_alpha_c1AI(creature);
     }
 
     struct npc_worgen_alpha_c1AI : public ScriptedAI
@@ -709,10 +1358,10 @@ public:
 
         void Reset()
         {
-            Run = Loc1 = Loc2 = Combat= Jump = false;
-            WaypointId          = 0;
-            tEnrage             = 0;
-            willCastEnrage      = urand(0, 1);
+            Run = Loc1 = Loc2 = Combat = Jump = false;
+            WaypointId = 0;
+            tEnrage = 0;
+            willCastEnrage = urand(0, 1);
         }
 
         void UpdateAI(uint32 diff)
@@ -733,12 +1382,12 @@ public:
                 if (Loc1) // If I was spawned in Location 1
                 {
                     if (WaypointId < 2)
-                        me->GetMotionMaster()->MovePoint(WaypointId,NW_WAYPOINT_LOC1[WaypointId].X, NW_WAYPOINT_LOC1[WaypointId].Y, NW_WAYPOINT_LOC1[WaypointId].Z);
+                        me->GetMotionMaster()->MovePoint(WaypointId, NW_WAYPOINT_LOC1[WaypointId].X, NW_WAYPOINT_LOC1[WaypointId].Y, NW_WAYPOINT_LOC1[WaypointId].Z);
                 }
                 else if (Loc2)// If I was spawned in Location 2
                 {
                     if (WaypointId < 2)
-                        me->GetMotionMaster()->MovePoint(WaypointId,N_WAYPOINT_LOC[WaypointId].X, N_WAYPOINT_LOC[WaypointId].Y, N_WAYPOINT_LOC[WaypointId].Z);
+                        me->GetMotionMaster()->MovePoint(WaypointId, N_WAYPOINT_LOC[WaypointId].X, N_WAYPOINT_LOC[WaypointId].Y, N_WAYPOINT_LOC[WaypointId].Z);
                 }
             }
 
@@ -787,14 +1436,14 @@ public:
 
             if (Loc1)
             {
-                CommonWPCount = sizeof(NW_WAYPOINT_LOC1)/sizeof(Waypoint); // Count our waypoints
+                CommonWPCount = sizeof(NW_WAYPOINT_LOC1) / sizeof(Waypoint); // Count our waypoints
             }
             else if (Loc2)
             {
-                CommonWPCount = sizeof(N_WAYPOINT_LOC)/sizeof(Waypoint); // Count our waypoints
+                CommonWPCount = sizeof(N_WAYPOINT_LOC) / sizeof(Waypoint); // Count our waypoints
             }
 
-            WaypointId = PointId+1; // Increase to next waypoint
+            WaypointId = PointId + 1; // Increase to next waypoint
 
             if (WaypointId >= CommonWPCount) // If we have reached the last waypoint
             {
@@ -827,7 +1476,7 @@ public:
 
     CreatureAI* GetAI(Creature* creature) const
     {
-        return new npc_worgen_alpha_c2AI (creature);
+        return new npc_worgen_alpha_c2AI(creature);
     }
 
     struct npc_worgen_alpha_c2AI : public ScriptedAI
@@ -839,10 +1488,10 @@ public:
 
         void Reset()
         {
-            Run = Combat= Jump = false;
-            WaypointId          = 0;
-            tEnrage             = 0;
-            willCastEnrage      = urand(0, 1);
+            Run = Combat = Jump = false;
+            WaypointId = 0;
+            tEnrage = 0;
+            willCastEnrage = urand(0, 1);
         }
 
         void UpdateAI(uint32 diff)
@@ -855,7 +1504,7 @@ public:
             if (Run && !Jump && !Combat)
             {
                 if (WaypointId < 2)
-                    me->GetMotionMaster()->MovePoint(WaypointId,SW_WAYPOINT_LOC1[WaypointId].X, SW_WAYPOINT_LOC1[WaypointId].Y, SW_WAYPOINT_LOC1[WaypointId].Z);
+                    me->GetMotionMaster()->MovePoint(WaypointId, SW_WAYPOINT_LOC1[WaypointId].X, SW_WAYPOINT_LOC1[WaypointId].Y, SW_WAYPOINT_LOC1[WaypointId].Z);
             }
 
             if (!Run && Jump && !Combat) // After Jump
@@ -901,9 +1550,9 @@ public:
             if (Type != POINT_MOTION_TYPE)
                 return;
 
-            CommonWPCount = sizeof(SW_WAYPOINT_LOC1)/sizeof(Waypoint); // Count our waypoints
+            CommonWPCount = sizeof(SW_WAYPOINT_LOC1) / sizeof(Waypoint); // Count our waypoints
 
-            WaypointId = PointId+1; // Increase to next waypoint
+            WaypointId = PointId + 1; // Increase to next waypoint
 
             if (WaypointId >= CommonWPCount) // If we have reached the last waypoint
             {
@@ -915,82 +1564,56 @@ public:
     };
 };
 
-class npc_captured_riding_bat : public CreatureScript
+class spell_gen_gilneas_prison_periodic_dummy : public SpellScript
 {
-public:
-    npc_captured_riding_bat() : CreatureScript("npc_captured_riding_bat") {}
+    PrepareSpellScript(spell_gen_gilneas_prison_periodic_dummy);
 
-    CreatureAI* GetAI(Creature* creature) const
+    bool Validate(SpellInfo const* /*spellInfo*/) override
     {
-        return new npc_captured_riding_batAI (creature);
+        if (!sSpellMgr->GetSpellInfo(SPELL_SUMMON_RAVENOUS_WORGEN_1) ||
+            !sSpellMgr->GetSpellInfo(SPELL_SUMMON_RAVENOUS_WORGEN_2))
+            return false;
+        return true;
     }
 
-    struct npc_captured_riding_batAI : public npc_escortAI
+    void HandleDummy(SpellEffIndex /*effIndex*/)
     {
-        npc_captured_riding_batAI(Creature* creature) : npc_escortAI(creature) {}
-
-        bool PlayerOn;
-
-        void AttackStart(Unit* /*who*/) {}
-        void EnterCombat(Unit* /*who*/) {}
-        void EnterEvadeMode() {}
-
-        void Reset()
+        if (Unit* caster = GetCaster())
         {
-             PlayerOn       = false;
-        }
-
-        void PassengerBoarded(Unit* who, int8 /*seatId*/, bool apply)
-        {
-            if (who->GetTypeId() == TYPEID_PLAYER)
+            switch (RAND(0, 1))
             {
-                PlayerOn = true;
-                if (apply)
-                    Start(false, true, who->GetGUID(), NULL, NULL, true);
+            case 0:
+                caster->CastSpell(caster, SPELL_SUMMON_RAVENOUS_WORGEN_1, true);
+                for (uint8 i = 0; i < 7; i++)
+                    if (Creature* runt = caster->SummonCreature(NPC_WORGEN_RUNT, WorgenRuntHousePos[i]))
+                        runt->AI()->DoAction(i);
+                break;
+            case 1:
+                caster->CastSpell(caster, SPELL_SUMMON_RAVENOUS_WORGEN_2, true);
+                for (uint8 i = 7; i < 16; i++)
+                    if (Creature* runt = caster->SummonCreature(NPC_WORGEN_RUNT, WorgenRuntHousePos[i]))
+                        runt->AI()->DoAction(i);
+                if (RAND(0, 1) == 1)
+                    for (uint8 i = 0; i < RAND(1, 3); i++)
+                        if (Creature* runt = caster->SummonCreature(NPC_WORGEN_RUNT, WorgenRuntHousePos[i]))
+                            runt->AI()->DoAction(i);
+                break;
             }
         }
+    }
 
-        void WaypointReached(uint32 i)
-        {
-            Player* player = GetPlayerForEscort();
-            switch(i)
-            {
-                case 35:
-                    player->ExitVehicle();
-                    player->SetClientControl(me, 1);
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        void JustDied(Unit* /*killer*/)
-        {
-
-        }
-
-        void OnCharmed(bool /*apply*/)
-        {
-        }
-
-        void UpdateAI(uint32 diff)
-        {
-            npc_escortAI::UpdateAI(diff);
-            Player* player = GetPlayerForEscort();
-
-            if (PlayerOn)
-            {
-                player->SetClientControl(me, 0);
-                PlayerOn = false;
-            }
-        }
-    };
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_gen_gilneas_prison_periodic_dummy::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
 };
 
 struct npc_josiah_avery : public ScriptedAI
 {
-
-    npc_josiah_avery(Creature* creature) : ScriptedAI(creature) {}
+    npc_josiah_avery(Creature* creature)
+        : ScriptedAI(creature), _text_timer(0), _current_text(0) // <-- initialize members here
+    {
+    }
 
     uint32 _text_timer;
     uint32 _current_text;
@@ -1000,14 +1623,11 @@ struct npc_josiah_avery : public ScriptedAI
         _text_timer = 20 * IN_MILLISECONDS;
         _current_text = 1;
     }
-  
-    
+
     void UpdateAI(uint32 diff) override
     {
         if (!me->GetVictim() && me->FindNearestPlayer(20.0f))
         {
-
-            
             if (_text_timer <= diff)
             {
                 switch (_current_text)
@@ -1048,7 +1668,6 @@ struct npc_josiah_avery : public ScriptedAI
         }
     }
 };
-Position const josiahJumpPos = { -1796.63f, 1427.73f, 12.4624f };
 
 struct npc_josiah_avery_worgen_form : public PassiveAI
 {
@@ -1099,12 +1718,12 @@ struct npc_josiah_avery_worgen_form : public PassiveAI
                         if (Creature* labTrigger = lorna->FindNearestCreature(NPC_GENERIC_TRIGGER_LAB, 5.0f, true))
                             labTrigger->CastSpell(player, SPELL_PULL_TO);
 
-                    _events.ScheduleEvent(EVENT_JUMP_TO_PLAYER, 1);
+                    _events.ScheduleEvent(EVENT_JUMP_TO_PLAYER, 1000);
                 }
                 break;
             case EVENT_JUMP_TO_PLAYER:
                 me->GetMotionMaster()->MoveJump(josiahJumpPos, 10.0f, 14.18636f);
-                _events.ScheduleEvent(EVENT_SHOOT_JOSIAH, 1 + 200);
+                _events.ScheduleEvent(EVENT_SHOOT_JOSIAH, 1000 + 200);
                 break;
             case EVENT_SHOOT_JOSIAH:
                 if (Creature* lorna = me->FindNearestCreature(NPC_LORNA_CROWLEY, 30.0f, true))
@@ -1198,14 +1817,1547 @@ public:
     };
 };
 
+struct npc_gilnean_mastiff : public ScriptedAI
+{
+    npc_gilnean_mastiff(Creature* creature) : ScriptedAI(creature)
+    {
+        me->ApplySpellImmune(0, IMMUNITY_EFFECT, SPELL_ATTACK_LURKER, true);
+    }
+
+    void Reset() override
+    {
+        me->GetCharmInfo()->InitEmptyActionBar(false);
+        me->GetCharmInfo()->SetActionBar(0, SPELL_ATTACK_LURKER, ACT_PASSIVE);
+        me->SetReactState(REACT_DEFENSIVE);
+        me->GetCharmInfo()->SetIsFollowing(true);
+    }
+
+    void UpdateAI(uint32 /*diff*/) override
+    {
+        Player* player = me->GetOwner()->ToPlayer();
+
+        if (player->GetQuestStatus(QUEST_FROM_THE_SHADOWS) == QUEST_STATUS_REWARDED)
+            me->DespawnOrUnsummon(1);
+
+        if (!UpdateVictim())
+        {
+            me->GetCharmInfo()->SetIsFollowing(true);
+            me->SetReactState(REACT_DEFENSIVE);
+            return;
+        }
+
+        DoMeleeAttackIfReady();
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        me->DespawnOrUnsummon(1);
+    }
+
+    void KilledUnit(Unit* /*victim*/) override
+    {
+        Reset();
+    }
+};
+
+struct npc_bloodfang_lurker : public ScriptedAI
+{
+    npc_bloodfang_lurker(Creature* creature) : ScriptedAI(creature) {}
+
+    bool _enrage;
+    bool _frenzy;
+
+    void Reset() override
+    {
+        _enrage = false;
+        _frenzy = false;
+        DoCastSelf(SPELL_SHADOWSTALKER_STEALTH);
+        me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+        me->SetReactState(REACT_PASSIVE);
+    }
+
+    void StartAttack(Unit* who)
+    {
+        me->SetReactState(REACT_AGGRESSIVE);
+        me->SetInCombatWith(who);
+        who->SetInCombatWith(me);
+    }
+
+    void DamageTaken(Unit* attacker, uint32& damage) override
+    {
+        if (me->HasReactState(REACT_PASSIVE))
+            StartAttack(attacker);
+    }
+
+    void SpellHit(Unit* caster, const SpellInfo* spell) override
+    {
+        if (spell->Id == SPELL_ATTACK_LURKER)
+            StartAttack(caster);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        if (!_frenzy && me->HealthBelowPct(45))
+        {
+            _frenzy = true;
+            DoCast(SPELL_UNDYING_FRENZY);
+        }
+
+        if (!_enrage && me->HealthBelowPct(30))
+        {
+            _enrage = true;
+            DoCast(SPELL_ENRAGE);
+            Talk(WORGEN_ENRAGE_EMOTE);
+        }
+
+        DoMeleeAttackIfReady();
+    }
+};
+
+class spell_attack_lurker : public SpellScript
+{
+    PrepareSpellScript(spell_attack_lurker);
+
+    void HandleDummy()
+    {
+        Unit* caster = GetCaster();
+
+        if (Creature* target = caster->FindNearestCreature(NPC_BLOODFANG_LURKER, 30.0f))
+        {
+            float x, y, z, o;
+            target->GetContactPoint(caster, x, y, z, CONTACT_DISTANCE);
+            o = caster->GetOrientation();
+            float speedXY, speedZ;
+            speedZ = 10.0f;
+            speedXY = caster->GetExactDist2d(x, y) * 30.0f / speedZ;
+            caster->GetMotionMaster()->MoveCharge(x, y, z, speedXY, speedZ);
+            target->RemoveAura(SPELL_SHADOWSTALKER_STEALTH);
+            target->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+            target->SetReactState(REACT_AGGRESSIVE);
+            target->AI()->AttackStart(caster);
+        }
+    }
+
+    void Register() override
+    {
+        AfterCast += SpellCastFn(spell_attack_lurker::HandleDummy);
+    }
+};
+
+class npc_king_genn_greymane : public CreatureScript
+{
+public:
+    npc_king_genn_greymane() : CreatureScript("npc_king_genn_greymane") {}
+
+    bool OnQuestAccept(Player* player, Creature* creature, Quest const* quest)
+    {
+        if (quest->GetQuestId() == QUEST_SAVE_KRENNAN_ARANAS)
+        {
+            float x, y;
+            creature->GetNearPoint2D(x, y, 2.0f, player->GetOrientation() + M_PI / 2);
+
+            if (Creature* horse = player->SummonCreature(NPC_KING_GREYMANES_HORSE, x, y, creature->GetPositionZ(), creature->GetOrientation()))
+            {
+                if (npc_escortAI* escort = CAST_AI(npc_escortAI, horse->AI()))
+                {
+                    escort->AddWaypoint(1, -1799.37f, 1400.21f, 19.8951f);
+                    escort->AddWaypoint(2, -1798.23f, 1396.9f, 19.8993f);
+                    escort->AddWaypoint(3, -1795.03f, 1388.01f, 19.8898f);
+                    escort->AddWaypoint(4, -1790.16f, 1378.7f, 19.8016f);
+                    escort->AddWaypoint(5, -1786.41f, 1372.97f, 19.8406f);
+                    escort->AddWaypoint(6, -1779.72f, 1364.88f, 19.8131f);
+                    escort->AddWaypoint(7, -1774.43f, 1359.87f, 19.7021f);
+                    escort->AddWaypoint(8, -1769.0f, 1356.76f, 19.7439f);
+                    escort->AddWaypoint(9, -1762.64f, 1356.02f, 19.7979f);
+                    escort->AddWaypoint(10, -1758.91f, 1356.08f, 19.8635f);
+                    escort->AddWaypoint(11, -1751.95f, 1356.8f, 19.8273f);
+                    escort->AddWaypoint(12, -1745.66f, 1357.21f, 19.7993f);
+                    escort->AddWaypoint(13, -1738.7f, 1356.64f, 19.7822f);
+                    escort->AddWaypoint(14, -1731.79f, 1355.51f, 19.7149f);
+                    escort->AddWaypoint(15, -1724.89f, 1354.29f, 19.8661f);
+                    escort->AddWaypoint(16, -1718.03f, 1352.93f, 19.7824f);
+                    escort->AddWaypoint(17, -1707.68f, 1351.16f, 19.7811f, 0, true); // Jump
+                    escort->AddWaypoint(18, -1673.04f, 1344.91f, 15.1353f, 2000);
+                    escort->AddWaypoint(19, -1673.04f, 1344.91f, 15.1353f);
+                    escort->AddWaypoint(20, -1669.32f, 1346.55f, 15.1353f);
+                    escort->AddWaypoint(21, -1666.45f, 1349.89f, 15.1353f);
+                    escort->AddWaypoint(22, -1665.61f, 1353.85f, 15.1353f);
+                    escort->AddWaypoint(23, -1666.04f, 1358.01f, 15.1353f);
+                    escort->AddWaypoint(24, -1669.79f, 1360.71f, 15.1353f);
+                    escort->AddWaypoint(25, -1673.1f, 1362.11f, 15.1353f);
+                    escort->AddWaypoint(26, -1677.12f, 1361.57f, 15.1353f);
+                    escort->AddWaypoint(27, -1679.9f, 1360.1f, 15.1353f);
+                    escort->AddWaypoint(28, -1682.79f, 1357.56f, 15.1353f);
+                    escort->AddWaypoint(29, -1682.79f, 1357.56f, 15.1353f);
+                    escort->AddWaypoint(30, -1689.07f, 1352.39f, 15.1353f);
+                    escort->AddWaypoint(31, -1691.91f, 1351.83f, 15.1353f);
+                    escort->AddWaypoint(32, -1703.81f, 1351.82f, 19.7604f);
+                    escort->AddWaypoint(33, -1707.26f, 1352.38f, 19.7826f);
+                    escort->AddWaypoint(34, -1712.25f, 1353.55f, 19.7826f);
+                    escort->AddWaypoint(35, -1718.2f, 1356.51f, 19.7164f);
+                    escort->AddWaypoint(36, -1741.5f, 1372.04f, 19.9569f);
+                    escort->AddWaypoint(37, -1746.23f, 1375.8f, 19.9817f);
+                    escort->AddWaypoint(38, -1751.06f, 1380.53f, 19.8424f);
+                    escort->AddWaypoint(39, -1754.97f, 1386.34f, 19.8474f);
+                    escort->AddWaypoint(40, -1760.77f, 1394.37f, 19.9282f);
+                    escort->AddWaypoint(41, -1765.11f, 1402.07f, 19.8816f);
+                    escort->AddWaypoint(42, -1768.24f, 1410.2f, 19.7833f);
+                    escort->AddWaypoint(43, -1772.26f, 1420.48f, 19.9029f);
+                    escort->AddWaypoint(44, -1776.98f, 1436.13f, 19.632f);
+                    player->EnterVehicle(horse, 0);
+                }
+            }
+        }
+
+        return true;
+    }
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_king_genn_greymaneAI(creature);
+    }
+
+    struct npc_king_genn_greymaneAI : public ScriptedAI
+    {
+        npc_king_genn_greymaneAI(Creature* creature) : ScriptedAI(creature)
+        {
+            _scheduler.CancelAll();
+
+
+            _scheduler.Schedule(std::chrono::milliseconds(urand(15000, 35000)) , [this](TaskContext context)
+                {
+                    Talk(0);
+
+                    
+                    context.Repeat(std::chrono::milliseconds(urand(15000, 35000)));
+                });
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            _scheduler.Update(diff);
+        }
+
+    private:
+        TaskScheduler _scheduler;
+    };
+};
+
+class npc_vehicle_genn_horse : public CreatureScript
+{
+public:
+    npc_vehicle_genn_horse() : CreatureScript("npc_vehicle_genn_horse") {}
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_vehicle_genn_horseAI(creature);
+    }
+
+    struct npc_vehicle_genn_horseAI : public npc_escortAI
+    {
+        npc_vehicle_genn_horseAI(Creature* creature) : npc_escortAI(creature)
+        {
+            _aranasSaved = false;
+            _playerSeated = false;
+        }
+
+        bool _playerSeated;
+        bool _aranasSaved;
+
+        void AttackStart(Unit* /*who*/) override {}
+        void EnterCombat(Unit* /*who*/) override {}
+        void EnterEvadeMode() override {}
+
+        void Reset() override
+        {
+            _playerSeated = false;
+        }
+
+        void PassengerBoarded(Unit* who, int8 /*seatId*/, bool apply)
+        {
+            if (who->GetTypeId() == TYPEID_PLAYER)
+            {
+                _playerSeated = true;
+
+                if (apply)
+                {
+                    Start(false, true, who->GetGUID());
+                    me->SetSpeed(MOVE_WALK, 1.0f, true);
+                    me->SetSpeed(MOVE_RUN, 1.3f, true);
+                }
+            }
+            else
+            {
+                if (apply)
+                {
+                    SetEscortPaused(false);
+                    _aranasSaved = true;
+                    me->SetSpeed(MOVE_WALK, 1.0f, true);
+                    me->SetSpeed(MOVE_RUN, 1.3f, true);
+                }
+                else
+                    me->DespawnOrUnsummon(1);
+            }
+        }
+
+        void WaypointReached(uint32 i)
+        {
+            Player* player = GetPlayerForEscort();
+
+            switch (i)
+            {
+            case 1:
+            {
+                if (Unit* passenger = me->GetVehicleKit()->GetPassenger(0))
+                {
+                    if (Vehicle* vehicle = me->GetVehicleKit())
+                        if (Unit* passenger = vehicle->GetPassenger(0))
+                            if (Player* player = passenger->ToPlayer())
+                                player->SetClientControl(me, 0);
+                }
+                break;
+            }
+            case 17:
+            {
+                if (Unit* passenger = me->GetVehicleKit()->GetPassenger(0))
+                {
+                    if (Creature* aranas = passenger->FindNearestCreature(NPC_KRENNAN_ARANAS, 50.0f))
+                        if (Vehicle* vehicle = me->GetVehicleKit())
+                            if (Unit* passenger = vehicle->GetPassenger(0))
+                                if (Player* player = passenger->ToPlayer())
+                                    aranas->AI()->Talk(TEXT_KRENNAN_ARANAS);
+
+                    me->GetMotionMaster()->MoveJump(-1673.04f, 1344.91f, 15.1353f, 25.0f, 15.0f);
+
+                    me->m_Events.AddLambdaEventAtOffset([this, passenger]()
+                        {
+                            Talk(EMOTE_SAVE_KRENNAN_ARANAS, passenger);
+                        }, 2000);
+                }
+                break;
+            }
+            case 40:
+            {
+                if (Vehicle* vehicle = me->GetVehicleKit())
+                {
+                    if (Unit* passenger = vehicle->GetPassenger(0))
+                    {
+                        if (Player* player = passenger->ToPlayer())
+                        {
+                            std::list<Creature*> guards;
+                            me->GetCreatureListWithEntryInGrid(guards, NPC_GILNEAS_CITY_GUARD, 90.0f);
+
+                            if (!guards.empty())
+                                for (std::list<Creature*>::const_iterator itr = guards.begin(); itr != guards.end(); ++itr)
+                                    if ((*itr)->IsAlive())
+                                        if (Creature* worgen = (*itr)->FindNearestCreature(NPC_BLOODFANG_RIPPER, 90.0f))
+                                            (*itr)->CastSpell(worgen, SPELL_GUARD_SHOOT, false);
+                        }
+                    }
+                }
+                break;
+            }
+            case 41:
+            {
+                me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                me->CombatStop();
+                break;
+            }
+            case 42:
+            {
+                if (Vehicle* vehicle = me->GetVehicleKit())
+                    if (Unit* passenger = vehicle->GetPassenger(0))
+                        if (Player* player = passenger->ToPlayer())
+                        {
+                            player->KilledMonsterCredit(NPC_KRENNAN_ARANAS_KILL_CREDIT, 0);
+
+                            if (Unit* passenger_2 = vehicle->GetPassenger(1))
+                                if (Creature* aranas = passenger_2->ToCreature())
+                                    aranas->AI()->Talk(TEXT_SAVED_KRENNAN_ARANAS);
+                        }
+                break;
+            }
+            case 44:
+            {
+                if (Unit* passenger = me->GetVehicleKit()->GetPassenger(0))
+                {
+                    if (Vehicle* vehicle = me->GetVehicleKit())
+                    {
+                        if (Unit* passenger = vehicle->GetPassenger(0))
+                            if (Player* player = passenger->ToPlayer())
+                                player->SetClientControl(me, 1);
+
+                        if (Unit* passenger = vehicle->GetPassenger(1))
+                            if (Creature* aranas = passenger->ToCreature())
+                                aranas->DespawnOrUnsummon();
+
+                        vehicle->RemoveAllPassengers();
+                    }
+                }
+                me->DespawnOrUnsummon(1);
+                break;
+            }
+            }
+        }
+
+        void OnCharmed(bool /*apply*/) {}
+
+        void UpdateAI(uint32 diff) override
+        {
+            npc_escortAI::UpdateAI(diff);
+            Player* player = GetPlayerForEscort();
+
+            if (_playerSeated)
+            {
+                player->SetClientControl(me, 0);
+                _playerSeated = false;
+            }
+        }
+    };
+};
+
+struct npc_saved_aranas : public ScriptedAI
+{
+    npc_saved_aranas(Creature* creature) : ScriptedAI(creature)
+    {
+        me->SetReactState(REACT_PASSIVE);
+        me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+
+        if (me->IsSummon())
+        {
+            if (Creature* horse = me->FindNearestCreature(NPC_KING_GREYMANES_HORSE, 20.0f))
+                DoCast(horse, 84275, true);
+
+            if (Creature* aranas = me->FindNearestCreature(NPC_KRENNAN_ARANAS, 50.0f))
+                aranas->DespawnOrUnsummon();
+        }
+    }
+};
+
+struct npc_duskhaven_watchman : public ScriptedAI
+{
+    npc_duskhaven_watchman(Creature* creature) : ScriptedAI(creature)
+    {
+        events.ScheduleEvent(EVENT_SEARCH_INVADER, 2000);
+    }
+
+    EventMap events;
+
+    void DamageTaken(Unit* who, uint32& damage)
+    {
+        if (who && who->ToCreature() && (who->GetEntry() == NPC_ENTRY_INVADER || who->GetEntry() == NPC_ENTRY_FOOTSOLDIER))
+            damage = 0;
+    }
+
+    void UpdateAI(uint32 diff)
+    {
+        events.Update(diff);
+
+        while (uint32 eventId = events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+            case EVENT_SEARCH_INVADER:
+            {
+                if (!me->IsInCombat())
+                {
+                    if (Creature* invader = me->FindNearestCreature(NPC_ENTRY_INVADER, 15.5f, true))
+                        AttackStart(invader);
+                }
+                else
+                    events.RescheduleEvent(EVENT_SEARCH_INVADER, urand(2000, 5000));
+                break;
+            }
+            case EVENT_SEARCH_FOOTSOLDIER:
+            {
+                if (!me->IsInCombat())
+                {
+                    if (Creature* footsoldier = me->FindNearestCreature(NPC_ENTRY_FOOTSOLDIER, 15.5f, true))
+                        AttackStart(footsoldier);
+                }
+                else
+                    events.RescheduleEvent(EVENT_SEARCH_FOOTSOLDIER, urand(2000, 5000));
+                break;
+            }
+            default:
+                break;
+            }
+        }
+
+        if (!UpdateVictim())
+            return;
+
+        DoMeleeAttackIfReady();
+    }
+};
+
+struct npc_forsaken_invader : public ScriptedAI
+{
+    npc_forsaken_invader(Creature* creature) : ScriptedAI(creature)
+    {
+        events.ScheduleEvent(EVENT_SEARCH_WATCHMAN, 2000);
+    }
+
+    EventMap events;
+
+    void DamageTaken(Unit* who, uint32& damage)
+    {
+        if (who->ToCreature() && who->GetEntry() == NPC_ENTRY_WATCHMAN)
+            damage = 0;
+    }
+
+    void UpdateAI(uint32 diff)
+    {
+        events.Update(diff);
+
+        while (uint32 eventId = events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+            case EVENT_SEARCH_WATCHMAN:
+            {
+                if (!me->IsInCombat())
+                {
+                    if (Creature* watchman = me->FindNearestCreature(NPC_ENTRY_WATCHMAN, 15.5f, true))
+                        AttackStart(watchman);
+                }
+                else
+                    events.RescheduleEvent(EVENT_SEARCH_WATCHMAN, urand(2000, 5000));
+                break;
+            }
+            default:
+                break;
+            }
+        }
+
+        if (!UpdateVictim())
+            return;
+
+        DoMeleeAttackIfReady();
+    }
+};
+
+struct npc_forsaken_footsoldier : public ScriptedAI
+{
+    npc_forsaken_footsoldier(Creature* creature) : ScriptedAI(creature)
+    {
+        events.ScheduleEvent(EVENT_SEARCH_WATCHMAN, 2000);
+    }
+
+    EventMap events;
+
+    void DamageTaken(Unit* who, uint32& damage)
+    {
+        if (who && who->ToCreature() && who->GetEntry() == NPC_ENTRY_WATCHMAN)
+            damage = 0;
+    }
+
+    void UpdateAI(uint32 diff)
+    {
+        events.Update(diff);
+
+        while (uint32 eventId = events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+            case EVENT_SEARCH_WATCHMAN:
+            {
+                if (!me->IsInCombat())
+                {
+                    if (Creature* watchman = me->FindNearestCreature(NPC_ENTRY_WATCHMAN, 15.5f, true))
+                        AttackStart(watchman);
+                }
+                else
+                    events.RescheduleEvent(EVENT_SEARCH_WATCHMAN, urand(2000, 5000));
+                break;
+            }
+            default:
+                break;
+            }
+        }
+
+        if (!UpdateVictim())
+            return;
+
+        DoMeleeAttackIfReady();
+    }
+};
+
+class npc_forsaken_catapult : public CreatureScript
+{
+public:
+    npc_forsaken_catapult() : CreatureScript("npc_forsaken_catapult") {}
+
+    bool OnGossipHello(Player* player, Creature* creature)
+    {
+        if (player->GetQuestStatus(QUEST_ENTRY_TWO_BY_SEA) == QUEST_STATUS_INCOMPLETE)
+        {
+            if (player->GetVehicleBase())
+                return true;
+
+            player->EnterVehicle(creature, 0);
+            return true;
+        }
+        return true;
+    }
+
+    struct npc_forsaken_catapultAI : public ScriptedAI
+    {
+        npc_forsaken_catapultAI(Creature* creature) : ScriptedAI(creature)
+        {
+            events.ScheduleEvent(EVENT_LAUNCH_BOULDER, urand(8000, 20000));
+            events.ScheduleEvent(EVENT_CHECK_PASSENGER, 5000);
+        }
+
+        EventMap events;
+
+        void OnCharmed(bool apply) {}
+
+        void Reset()
+        {
+            events.ScheduleEvent(EVENT_LAUNCH_BOULDER, urand(8000, 20000));
+            events.ScheduleEvent(EVENT_CHECK_PASSENGER, 5000);
+            me->RemoveFlag(UNIT_FIELD_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
+            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+            me->setFaction(1735);
+            me->SetReactState(REACT_PASSIVE);
+        }
+
+        void UpdateAI(uint32 diff)
+        {
+            events.Update(diff);
+
+            while (uint32 eventId = events.ExecuteEvent())
+            {
+                switch (eventId)
+                {
+                case EVENT_LAUNCH_BOULDER:
+                {
+                    if (Unit* passenger = me->GetVehicleKit()->GetPassenger(0))
+                    {
+                        if (passenger->GetTypeId() != TYPEID_PLAYER)
+                        {
+                            if (!me->HasUnitState(UNIT_STATE_CASTING))
+                            {
+                                DoCast(SPELL_LAUNCH_BOULDER);
+                                events.RescheduleEvent(EVENT_LAUNCH_BOULDER, urand(5000, 12000));
+                            }
+                            else
+                                events.RescheduleEvent(EVENT_LAUNCH_BOULDER, 1000);
+                        }
+                    }
+                    else
+                    {
+                        events.CancelEvent(EVENT_LAUNCH_BOULDER);
+                        events.ScheduleEvent(EVENT_DESPAWN_CATAPULT, 10000);
+                    }
+                    break;
+                }
+                case EVENT_DESPAWN_CATAPULT:
+                {
+                    Unit* passenger1 = me->GetVehicleKit()->GetPassenger(0);
+                    Unit* passenger2 = me->GetVehicleKit()->GetPassenger(1);
+
+                    if (!passenger1 && !passenger2)
+                        me->DisappearAndDie();
+                    else
+                        events.RescheduleEvent(EVENT_DESPAWN_CATAPULT, 2000);
+                    break;
+                }
+                case EVENT_CHECK_PASSENGER:
+                {
+                    Unit* passenger1 = me->GetVehicleKit()->GetPassenger(0);
+                    Unit* passenger2 = me->GetVehicleKit()->GetPassenger(1);
+
+                    if (!passenger1 && !passenger2)
+                    {
+                        me->SetFlag(UNIT_FIELD_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
+                        me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                        me->setFaction(35);
+                        events.CancelEvent(EVENT_CHECK_PASSENGER);
+                    }
+                    else
+                        events.RescheduleEvent(EVENT_CHECK_PASSENGER, 2000 + 500);
+                    break;
+                }
+                default:
+                    break;
+                }
+            }
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const
+    {
+        return new npc_forsaken_catapultAI(creature);
+    }
+};
+
+class BoulderTargetCheck
+{
+public:
+    BoulderTargetCheck() {}
+
+    bool operator()(WorldObject* object)
+    {
+        return (object->ToPlayer() || (object->ToUnit() && (object->ToUnit()->GetEntry() != NPC_CATAPULT_BOULDER_TRIGGER || object->GetPositionZ() > 3.48f)));
+    }
+};
+
+class spell_catapult_boulder : public SpellScript
+{
+    PrepareSpellScript(spell_catapult_boulder);
+
+    void FilterTargets(std::list<WorldObject*>& targets)
+    {
+        if (targets.empty())
+            return;
+
+        targets.remove_if(BoulderTargetCheck());
+    }
+
+    void Register() override
+    {
+        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_catapult_boulder::FilterTargets, EFFECT_0, TARGET_UNIT_SRC_AREA_ENTRY);
+    }
+};
+
+class npc_gilneas_children : public CreatureScript
+{
+public:
+    npc_gilneas_children(const char* scriptName, uint32 spellId, uint8 playerSayId) : CreatureScript(scriptName), _spellId(spellId), _playerSayId(playerSayId) {}
+
+private:
+    uint32 _spellId;
+    uint8 _playerSayId;
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new creature_script(creature, _spellId, _playerSayId);
+    }
+
+    struct creature_script : public ScriptedAI
+    {
+        creature_script(Creature* creature, uint32 spellId, uint8 playerSayId) : ScriptedAI(creature), _spellId(spellId), _playerSayId(playerSayId) {}
+
+        EventMap events;
+        ObjectGuid playerGUID;
+        uint32 _spellId;
+        uint8 _playerSayId;
+        bool activated;
+
+        void Reset() override
+        {
+            events.Reset();
+            playerGUID = 0;
+            activated = false;
+            me->SetFlag(UNIT_FIELD_NPC_FLAGS, UNIT_NPC_FLAG_SPELLCLICK);
+
+            if (me->GetEntry() == NPC_CYNTHIA)
+                events.ScheduleEvent(EVENT_CRY, 1000);
+        }
+
+        void SpellHit(Unit* caster, const SpellInfo* spell)
+        {
+            if (!activated && spell->Id == _spellId)
+            {
+                if (Player* player = caster->ToPlayer())
+                {
+                    activated = true;
+                    playerGUID = player->GetGUID();
+                    player->Say(PlayerText[_playerSayId], LANG_UNIVERSAL);
+                    player->KilledMonsterCredit(me->GetEntry(), 0);
+                    me->RemoveFlag(UNIT_FIELD_NPC_FLAGS, UNIT_NPC_FLAG_SPELLCLICK);
+                    events.ScheduleEvent(EVENT_TALK_TO_PLAYER, 3000 + 500);
+                }
+            }
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            events.Update(diff);
+
+            if (uint32 eventId = events.ExecuteEvent())
+            {
+                switch (eventId)
+                {
+                case EVENT_TALK_TO_PLAYER:
+                {
+                    events.CancelEvent(EVENT_CRY);
+
+                    if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
+                        Talk(CHILDREN_TEXT_ID, player);
+
+                    events.ScheduleEvent(EVENT_START_RUN, 5000);
+                }
+                break;
+                case EVENT_START_RUN:
+                {
+                    switch (me->GetEntry())
+                    {
+                    case NPC_JAMES:
+                        me->GetMotionMaster()->MoveSplinePath(JamesPath[0], JamesPathLenght, false, false, 0.f, false, false);
+                        break;
+                    case NPC_CYNTHIA:
+                        me->GetMotionMaster()->MoveSplinePath(CynthiaPath[0], CynthiaPathLenght, false, false, 0.f, false, false);
+                        break;
+                    case NPC_ASHLEY:
+                        me->GetMotionMaster()->MoveSplinePath(AshleyPath[0], AshleyPathLenght, false, false, 0.f, false, false);
+                        break;
+                    default:
+                        return;
+                    }
+
+                    events.ScheduleEvent(EVENT_OPEN_DOOR, me->GetSplineDuration());
+                }
+                break;
+                case EVENT_OPEN_DOOR:
+                {
+                    if (GameObject* door = me->FindNearestGameObject(GO_DOOR_TO_THE_BASEMENT, 10.0f))
+                    {
+                        if (door->GetGoState() == GO_STATE_READY)
+                        {
+                            door->UseDoorOrButton();
+                            events.ScheduleEvent(EVENT_RESUME_RUN, 2000);
+                        }
+                        else
+                            events.ScheduleEvent(EVENT_RESUME_RUN, 0);
+                    }
+                }
+                break;
+                case EVENT_RESUME_RUN:
+                    me->GetMotionMaster()->MoveSplinePath(childrenBasementPath[0], childrenBasementPathLenght, false, false, 0.f, false, false);
+                    me->DespawnOrUnsummon(me->GetSplineDuration());
+                    break;
+                case EVENT_CRY:
+                    me->HandleEmoteCommand(EMOTE_ONESHOT_CRY);
+                    events.ScheduleEvent(EVENT_CRY, urand(500, 1000));
+                    break;
+                }
+            }
+        }
+    };
+};
+
+class npc_wahl : public CreatureScript
+{
+public:
+    npc_wahl(const char* ScriptName) : CreatureScript(ScriptName) {}
+
+    struct npc_wahlAI : public npc_escortAI
+    {
+        npc_wahlAI(Creature* creature) : npc_escortAI(creature)
+        {
+            creature->SetReactState(REACT_PASSIVE);
+            creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+            creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PC || UNIT_FLAG_IMMUNE_TO_NPC);
+        }
+
+        void DoAction(int32 const action) override
+        {
+            if (action == ACTION_CONTINUE_SCENE)
+            {
+                me->m_Events.AddLambdaEventAtOffset([this]()
+                    {
+                        SetEscortPaused(false);
+                    }, 4000);
+            }
+        }
+
+        void WaypointReached(uint32 point)
+        {
+            if (point == 1)
+                if (me->IsSummon())
+                    if (Unit* summoner = me->ToTempSummon()->GetSummoner())
+                    {
+                        SetEscortPaused(true);
+                        me->SetDisplayId(NPC_WAHL_WORGEN);
+                        Talk(YELL_DONT_MESS);
+                        me->SetReactState(REACT_AGGRESSIVE);
+                        me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                        me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PC || UNIT_FLAG_IMMUNE_TO_NPC);
+
+                        me->m_Events.AddLambdaEventAtOffset([this, summoner]()
+                            {
+                                AttackStart(summoner);
+                            }, 800);
+                    }
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            npc_escortAI::UpdateAI(diff);
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_wahlAI(creature);
+    }
+};
+
+class npc_lucius_the_cruel : public CreatureScript
+{
+public:
+    npc_lucius_the_cruel(const char* ScriptName) : CreatureScript(ScriptName) {}
+
+    struct npc_lucius_the_cruelAI : public ScriptedAI
+    {
+        npc_lucius_the_cruelAI(Creature* creature) : ScriptedAI(creature)
+        {
+            SetCombatMovement(false);
+            Catch = false;
+            Summon = false;
+            uiCatchTimer = 1000;
+            uiShootTimer = 500;
+            uiPlayerGUID = 0;
+            uiSummonTimer = 1500;
+            me->SetReactState(REACT_PASSIVE);
+            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PC || UNIT_FLAG_IMMUNE_TO_NPC);
+        }
+
+        ObjectGuid uiPlayerGUID;
+        uint32 uiCatchTimer;
+        uint32 uiShootTimer;
+        uint32 uiSummonTimer;
+        bool Catch;
+        bool Summon;
+
+        void EnterEvadeMode() override
+        {
+            me->DespawnOrUnsummon();
+        }
+
+        void JustDied(Unit* /*killer*/) override
+        {
+            if (Creature* wahl = me->FindNearestCreature(NPC_WAHL, 30.f))
+                wahl->AI()->DoAction(ACTION_CONTINUE_SCENE);
+        }
+
+        void MovementInform(uint32 type, uint32 id) override
+        {
+            if (type != POINT_MOTION_TYPE)
+                return;
+
+            if (id == POINT_CATCH_CHANCE)
+            {
+                me->HandleEmoteCommand(EMOTE_ONESHOT_KNEEL);
+
+                if (me->IsSummon())
+                    if (Unit* summoner = me->ToTempSummon()->GetSummoner())
+                        if (Creature* chance = summoner->ToCreature())
+                        {
+                            me->m_Events.AddLambdaEventAtOffset([this, chance]()
+                                {
+                                    Catch = true;
+                                    Summon = true;
+                                    chance->AI()->DoAction(ACTION_CHANCE_DESPAWN);
+                                }, 4000);
+                        }
+            }
+        }
+
+        void DoAction(int32 const action) override
+        {
+            if (action == ACTION_SUMMON_LUCIUS)
+            {
+                me->GetMotionMaster()->MovePoint(POINT_CATCH_CHANCE, -2106.372f, 2331.106f, 7.360674f);
+
+                me->m_Events.AddLambdaEventAtOffset([this]()
+                    {
+                        Talk(SAY_THIS_CAT_IS_MINE);
+                    }, 1000);
+            }
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            if (Catch)
+            {
+                if (uiCatchTimer <= diff)
+                {
+                    Catch = false;
+                    uiCatchTimer = 1000;
+                    me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                    me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PC || UNIT_FLAG_IMMUNE_TO_NPC);
+                    me->SetReactState(REACT_AGGRESSIVE);
+
+                    if (Player* player = Unit::GetPlayer(*me, uiPlayerGUID))
+                        AttackStart(player);
+                }
+                else
+                    uiCatchTimer -= diff;
+            }
+
+            if (Summon)
+            {
+                if (uiSummonTimer <= diff)
+                {
+                    Summon = false;
+                    uiSummonTimer = 1500;
+
+                    if (Creature* wahl = me->SummonCreature(NPC_WAHL, -2098.366f, 2352.075f, 7.160643f))
+                    {
+                        if (npc_escortAI* npc_escort = CAST_AI(npc_wahl::npc_wahlAI, wahl->AI()))
+                        {
+                            npc_escort->AddWaypoint(0, -2106.54f, 2342.69f, 6.93668f);
+                            npc_escort->AddWaypoint(1, -2106.12f, 2334.90f, 7.36691f);
+                            npc_escort->AddWaypoint(2, -2117.80f, 2357.15f, 5.88139f);
+                            npc_escort->AddWaypoint(3, -2111.46f, 2366.22f, 7.17151f);
+                            npc_escort->Start(false, true);
+                        }
+                    }
+                }
+                else
+                    uiSummonTimer -= diff;
+            }
+
+            if (!UpdateVictim())
+                return;
+
+            if (uiShootTimer <= diff)
+            {
+                uiShootTimer = 1000;
+
+                if (me->GetDistance(me->GetVictim()) > 2.0f)
+                    DoCastVictim(SPELL_LUCIUS_SHOOT);
+            }
+            else
+                uiShootTimer -= diff;
+
+            DoMeleeAttackIfReady();
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_lucius_the_cruelAI(creature);
+    }
+};
+
+struct npc_chance_the_cat : public ScriptedAI
+{
+    npc_chance_the_cat(Creature* creature) : ScriptedAI(creature)
+    {
+        Despawn = false;
+        uiDespawnTimer = 500;
+    }
+
+    uint32 uiDespawnTimer;
+    bool Despawn;
+
+    void DoAction(int32 const action) override
+    {
+        if (action == ACTION_CHANCE_DESPAWN)
+            Despawn = true;
+    }
+
+    void SpellHit(Unit* caster, const SpellInfo* spell) override
+    {
+        if (spell->Id == SPELL_CATCH_CAT && caster->GetTypeId() == TYPEID_PLAYER)
+        {
+            me->RemoveFlag(UNIT_FIELD_NPC_FLAGS, UNIT_NPC_FLAG_SPELLCLICK);
+
+            if (Creature* lucius = me->SummonCreature(NPC_LUCIUS_THE_CRUEL, -2111.533f, 2329.95f, 7.390349f))
+            {
+                lucius->AI()->DoAction(ACTION_SUMMON_LUCIUS);
+                CAST_AI(npc_lucius_the_cruel::npc_lucius_the_cruelAI, lucius->AI())->uiPlayerGUID = caster->GetGUID();
+            }
+        }
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (Despawn)
+        {
+            if (uiDespawnTimer <= diff)
+            {
+                uiDespawnTimer = 500;
+                Despawn = false;
+                me->DespawnOrUnsummon();
+            }
+            else
+                uiDespawnTimer -= diff;
+        }
+    }
+};
+
+class npc_mountain_horse : public CreatureScript
+{
+public:
+    npc_mountain_horse(const char* ScriptName) : CreatureScript(ScriptName) {}
+
+    bool OnGossipHello(Player* player, Creature* creature)
+    {
+        if (player->GetQuestStatus(QUEST_THE_HUNGRY_ETTIN) == QUEST_STATUS_INCOMPLETE)
+        {
+            player->EnterVehicle(creature, 0);
+            creature->RemoveFlag(UNIT_FIELD_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
+            creature->GetMotionMaster()->Clear();
+            return true;
+        }
+        return true;
+    }
+
+    struct npc_mountain_horseAI : public ScriptedAI
+    {
+        npc_mountain_horseAI(Creature* creature) : ScriptedAI(creature) {}
+
+        EventMap events;
+
+        void Reset() override
+        {
+            if (!me->GetVehicleKit()->GetPassenger(0))
+                me->GetMotionMaster()->MoveRandom(8.0f);
+        }
+
+        void SpellHit(Unit* caster, SpellInfo const* spell)
+        {
+            switch (spell->Id)
+            {
+            case SPELL_ROUND_UP_HORSE:
+            {
+                if (me->GetVehicleKit()->GetPassenger(0))
+                    break;
+
+                me->DespawnOrUnsummon(1);
+                break;
+            }
+            default:
+                break;
+            }
+        }
+
+        void PassengerBoarded(Unit* /*passenger*/, int8 /*SeatId*/, bool apply)
+        {
+            if (!apply)
+            {
+                me->SetFlag(UNIT_FIELD_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
+                me->SetWalk(true);
+                me->AI()->EnterEvadeMode();
+            }
+        }
+
+        void OnCharmed(bool apply) {}
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_mountain_horseAI(creature);
+    }
+};
+
+struct npc_mountain_horse_summoned : public ScriptedAI
+{
+    npc_mountain_horse_summoned(Creature* creature) : ScriptedAI(creature) {}
+
+    EventMap events;
+
+    void IsSummonedBy(Unit* summoner) override
+    {
+        me->GetMotionMaster()->MoveFollow(summoner, 6.0f, 0);
+        me->CastSpell(summoner, SPELL_ROPE_CHANNEL, true);
+        me->ClearUnitState(UNIT_STATE_CASTING);
+        events.ScheduleEvent(EVENT_CHECK_LORNA, 2000);
+        events.ScheduleEvent(EVENT_CHECK_OWNER, 2000);
+        me->SetWalk(false);
+        me->SetSpeed(MOVE_RUN, 2.0f, true);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        events.Update(diff);
+
+        while (uint32 eventId = events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+            case EVENT_CHECK_LORNA:
+            {
+                if (Creature* lornaCrowley = me->FindNearestCreature(NPC_LORNA_CROWLEY_2, 8.0f, true))
+                {
+                    if (Unit* owner = me->GetCharmerOrOwner())
+                    {
+                        if (owner->GetTypeId() == TYPEID_PLAYER)
+                            owner->ToPlayer()->KilledMonsterCredit(QUEST_CREDIT_HORSE);
+                    }
+                    events.CancelEvent(EVENT_CHECK_LORNA);
+                    me->DespawnOrUnsummon(1);
+                }
+                else
+                    events.RescheduleEvent(EVENT_CHECK_LORNA, 2000);
+                break;
+            }
+            case EVENT_CHECK_OWNER:
+            {
+                if (Unit* owner = me->GetCharmerOrOwner())
+                {
+                    if (!owner->IsAlive() || !owner->IsInWorld() || !owner->GetVehicleBase())
+                        me->DespawnOrUnsummon(1);
+
+                    events.CancelEvent(EVENT_CHECK_OWNER);
+                }
+                else
+                    events.RescheduleEvent(EVENT_CHECK_OWNER, 2);
+                break;
+            }
+            default:
+                break;
+            }
+        }
+    }
+};
+
+class spell_gilneas_test_telescope : public SpellScript
+{
+    PrepareSpellScript(spell_gilneas_test_telescope);
+
+    void StartCinematic()
+    {
+        if (Unit* caster = GetCaster())
+        {
+            if (caster->GetTypeId() == TYPEID_PLAYER)
+            {
+                caster->PlayDirectSound(MUSIC_ENTRY_TELESCOPE, caster->ToPlayer());
+                caster->ToPlayer()->SendCinematicStart(PLAY_CINEMATIC_TELESCOPE);
+            }
+        }
+    }
+
+    void Register() override
+    {
+        AfterHit += SpellHitFn(spell_gilneas_test_telescope::StartCinematic);
+    }
+};
+
+class npc_stagecoach_carriage_exodus : public CreatureScript
+{
+public:
+    npc_stagecoach_carriage_exodus(const char* ScriptName) : CreatureScript(ScriptName) {}
+
+    bool OnGossipHello(Player* player, Creature* creature)
+    {
+        if (player->GetQuestStatus(QUEST_ENTRY_EXODUS) == QUEST_STATUS_COMPLETE)
+        {
+            if (player->GetVehicleBase())
+                return true;
+
+            if (Creature* harness = player->FindNearestCreature(NPC_STAGECOACH_HARNESS, 30.0f, true))
+                player->SummonCreature(NPC_HARNESS_SUMMONED, harness->GetPositionX(), harness->GetPositionY(), harness->GetPositionZ(), harness->GetOrientation(), TEMPSUMMON_MANUAL_DESPAWN, 600000, const_cast<SummonPropertiesEntry*>(sSummonPropertiesStore.LookupEntry(3105)));
+            return true;
+        }
+
+        return true;
+    }
+
+    struct npc_stagecoach_carriage_exodusAI : public ScriptedAI
+    {
+        npc_stagecoach_carriage_exodusAI(Creature* creature) : ScriptedAI(creature)
+        {
+            events.ScheduleEvent(EVENT_BOARD_HARNESS_OWNER, 1);
+            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_NPC | UNIT_FLAG_IMMUNE_TO_PC);
+        }
+
+        EventMap events;
+
+        void UpdateAI(uint32 diff)
+        {
+            events.Update(diff);
+
+            while (uint32 eventId = events.ExecuteEvent())
+            {
+                switch (eventId)
+                {
+                case EVENT_BOARD_HARNESS_OWNER:
+                {
+                    if (Unit* harness = me->GetVehicleCreatureBase())
+                    {
+                        if (Unit* harnessOwner = harness->ToTempSummon()->GetSummoner())
+                        {
+                            if (harnessOwner->IsAlive() && harnessOwner->IsInWorld())
+                            {
+                                harnessOwner->EnterVehicle(me, 1);
+                                events.CancelEvent(EVENT_BOARD_HARNESS_OWNER);
+                                break;
+                            }
+                        }
+                    }
+                    events.CancelEvent(EVENT_BOARD_HARNESS_OWNER);
+                    break;
+                }
+                default:
+                    break;
+                }
+            }
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_stagecoach_carriage_exodusAI(creature);
+    }
+};
+
+class npc_stagecoach_harness : public CreatureScript
+{
+public:
+    npc_stagecoach_harness(const char* ScriptName) : CreatureScript(ScriptName) {}
+
+    struct npc_stagecoach_harnessAI : public npc_escortAI
+    {
+        npc_stagecoach_harnessAI(Creature* creature) : npc_escortAI(creature) {}
+
+        void OnCharmed(bool apply) {}
+
+        void IsSummonedBy(Unit* owner)
+        {
+            DoAction(ACTION_START_WP);
+            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_NPC | UNIT_FLAG_IMMUNE_TO_PC);
+        }
+
+        void DoAction(int32 action)
+        {
+            switch (action)
+            {
+            case ACTION_START_WP:
+            {
+                Start(false, true, NULL, NULL, false, false, true);
+                SetDespawnAtEnd(true);
+
+                if (GameObject* gate = me->FindNearestGameObject(GO_FIRST_GATE, 80.0f))
+                    gate->UseDoorOrButton(0, false, me);
+
+                me->SetWalk(false);
+                me->SetSpeed(MOVE_RUN, 1.34f, true);
+                break;
+            }
+            default:
+                break;
+            }
+        }
+
+        void WaypointReached(uint32 point) override
+        {
+            switch (point)
+            {
+            case 16:
+            {
+                if (GameObject* gate = me->FindNearestGameObject(GO_KINGS_GATE, 80.0f))
+                    gate->UseDoorOrButton(0, false, me);
+                break;
+            }
+            case 24:
+            {
+                if (Unit* caravan = me->GetVehicleKit()->GetPassenger(2))
+                {
+                    if (Unit* lorna = caravan->GetVehicleKit()->GetPassenger(6))
+                    {
+                        if (lorna->ToCreature())
+                            lorna->ToCreature()->AI()->Talk(0);
+                    }
+                }
+                break;
+            }
+            case 30:
+            {
+                if (Unit* caravan = me->GetVehicleKit()->GetPassenger(2))
+                {
+                    if (Unit* player = caravan->GetVehicleKit()->GetPassenger(1))
+                        player->ExitVehicle();
+                }
+                break;
+            }
+            default:
+                break;
+            }
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_stagecoach_harnessAI(creature);
+    }
+};
+
+struct npc_koroth_the_hillbreaker : public ScriptedAI
+{
+    npc_koroth_the_hillbreaker(Creature* creature) : ScriptedAI(creature) {}
+
+    void DoAction(int32 const action) override
+    {
+        switch (action)
+        {
+        case ACTION_START_KOROTH_EVENT:
+            Talk(SAY_KOROTH_THE_HILLBREAKER_1);
+            me->GetMotionMaster()->MoveSplinePath(KorothPath[0], KorothPathLenght, false, true, 0.f, false, false);
+            TalkWithDelay(me->GetSplineDuration(), SAY_KOROTH_THE_HILLBREAKER_2);
+
+            me->m_Events.AddLambdaEventAtOffset([this]()
+                {
+                    me->GetMotionMaster()->MoveTargetedHome();
+                }, me->GetSplineDuration() + 3500);
+            break;
+        }
+    }
+
+    void UpdateAI(uint32 const diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        DoMeleeAttackIfReady();
+    }
+};
+
+class go_koroth_banner : public GameObjectScript
+{
+public:
+    go_koroth_banner(const char* ScriptName) : GameObjectScript(ScriptName) {}
+
+    struct go_koroth_bannerAI : public GameObjectAI
+    {
+        go_koroth_bannerAI(GameObject* go) : GameObjectAI(go) {}
+
+        void OnStateChanged(uint32 state, Unit* /*unit*/) override
+        {
+            if (state != GO_JUST_DEACTIVATED)
+                return;
+
+            if (Creature* koroth = go->FindNearestCreature(NPC_KOROTH_THE_HILLBREAKER, 30.0f))
+            {
+                if (koroth->IsAIEnabled)
+                {
+                    koroth->GetAI()->DoAction(ACTION_START_KOROTH_EVENT);
+                }
+            }
+        }
+    };
+
+    GameObjectAI* GetAI(GameObject* go) const override
+    {
+        return new go_koroth_bannerAI(go);
+    }
+};
+
+
+class npc_captured_riding_bat : public CreatureScript
+{
+public:
+    npc_captured_riding_bat() : CreatureScript("npc_captured_riding_bat") {}
+
+    CreatureAI* GetAI(Creature* creature) const
+    {
+        return new npc_captured_riding_batAI(creature);
+    }
+
+    struct npc_captured_riding_batAI : public npc_escortAI
+    {
+        npc_captured_riding_batAI(Creature* creature) : npc_escortAI(creature) {}
+
+        bool PlayerOn;
+
+        void AttackStart(Unit* /*who*/) {}
+        void EnterCombat(Unit* /*who*/) {}
+        void EnterEvadeMode() {}
+
+        void Reset()
+        {
+            PlayerOn = false;
+        }
+
+        void PassengerBoarded(Unit* who, int8 /*seatId*/, bool apply)
+        {
+            if (who->GetTypeId() == TYPEID_PLAYER)
+            {
+                PlayerOn = true;
+                if (apply)
+                    Start(false, true, who->GetGUID(), NULL, NULL, true);
+            }
+        }
+
+        void WaypointReached(uint32 i)
+        {
+            Player* player = GetPlayerForEscort();
+            switch (i)
+            {
+            case 35:
+                player->ExitVehicle();
+                player->SetClientControl(me, 1);
+                break;
+            default:
+                break;
+            }
+        }
+
+        void JustDied(Unit* /*killer*/)
+        {
+
+        }
+
+        void OnCharmed(bool /*apply*/)
+        {
+        }
+
+        void UpdateAI(uint32 diff)
+        {
+            npc_escortAI::UpdateAI(diff);
+            Player* player = GetPlayerForEscort();
+
+            if (PlayerOn)
+            {
+                player->SetClientControl(me, 0);
+                PlayerOn = false;
+            }
+        }
+    };
+};
+
+
 void AddSC_gilneas()
 {
+    new creature_script<npc_gilneas_crow>("npc_gilneas_crow");
+    new creature_script<npc_gilneas_city_guard_gate>("npc_gilneas_city_guard_gate");
+    new creature_script<npc_prince_liam_greymane>("npc_prince_liam_greymane");
     new npc_sean_dempsey();
     new npc_lord_darius_crowley_c1();
     new npc_worgen_runt_c1();
     new npc_worgen_alpha_c1();
-    RegisterCreatureAI(npc_josiah_avery);
     new npc_worgen_runt_c2();
     new npc_worgen_alpha_c2();
     new npc_captured_riding_bat();
+    new spell_script<spell_gen_gilneas_prison_periodic_dummy>("spell_gen_gilneas_prison_periodic_dummy");
+    new creature_script<npc_josiah_avery>("npc_josiah_avery");
+    new creature_script<npc_josiah_avery_worgen_form>("npc_josiah_avery_worgen_form");
+    new spell_script<spell_gilneas_pull_to>("spell_gilneas_pull_to");
+    new npc_lorna_crowley_basement("npc_lorna_crowley_basement");
+    new creature_script<npc_gilnean_mastiff>("npc_gilnean_mastiff");
+    new creature_script<npc_bloodfang_lurker>("npc_bloodfang_lurker");
+    new spell_script<spell_attack_lurker>("spell_attack_lurker");
+    new npc_king_genn_greymane();
+    new npc_vehicle_genn_horse();
+    new creature_script<npc_saved_aranas>("npc_saved_aranas");
+    new creature_script<npc_duskhaven_watchman>("npc_duskhaven_watchman");
+    new creature_script<npc_forsaken_invader>("npc_forsaken_invader");
+    new creature_script<npc_forsaken_footsoldier>("npc_forsaken_footsoldier");
+    new npc_forsaken_catapult();
+    new spell_script<spell_catapult_boulder>("spell_catapult_boulder");
+    new npc_gilneas_children("npc_james", SPELL_SAVE_JAMES, PLAYER_SAY_JAMES);
+    new npc_gilneas_children("npc_ashley", SPELL_SAVE_ASHLEY, PLAYER_SAY_ASHLEY);
+    new npc_gilneas_children("npc_cynthia", SPELL_SAVE_CYNTHIA, PLAYER_SAY_CYNTHIA);
+    new npc_wahl("npc_wahl");
+    new npc_lucius_the_cruel("npc_lucius_the_cruel");
+    new creature_script<npc_chance_the_cat>("npc_chance_the_cat");
+    new npc_mountain_horse("npc_mountain_horse");
+    new creature_script<npc_mountain_horse_summoned>("npc_mountain_horse_summoned");
+    new spell_script<spell_gilneas_test_telescope>("spell_gilneas_test_telescope");
+    new npc_stagecoach_carriage_exodus("npc_stagecoach_carriage_exodus");
+    new npc_stagecoach_harness("npc_stagecoach_harness");
+    new creature_script<npc_koroth_the_hillbreaker>("npc_koroth_the_hillbreaker");
+    new go_koroth_banner("go_koroth_banner");
 }
+
+

@@ -43,6 +43,11 @@ class WorldObject;
 
 #define SPELL_EFFECT_ANY (uint16)-1
 #define SPELL_AURA_ANY (uint16)-1
+// Add this macro to define PrepareSpellScript for spell scripts
+// Add this macro to define PrepareSpellScript for spell scripts
+#define PrepareSpellScript(className) \
+    static SpellScript* CreateSpellScript() { return new className(); }
+
 
 enum SpellScriptState
 {

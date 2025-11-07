@@ -185,6 +185,9 @@ class MotionMaster //: private std::stack<MovementGenerator *>
         void CustomJump(float x, float y, float z, float speedXY, float speedZ, uint32 id = 0);
         void MoveCirclePath(float x, float y, float z, float radius, bool clockwise, uint8 stepCount, float velocityOrDuration = 0.0f);
         void MoveFall(uint32 id = 0);
+        // for gilnas
+
+        void MoveSmoothPath(uint32 pointId, Position const* pathPoints, size_t pathSize, bool walk = false, bool fly = false);
 
         void MoveSeekAssistance(float x, float y, float z);
         void MoveSeekAssistanceDistract(uint32 timer);

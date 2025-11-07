@@ -399,6 +399,34 @@ void MotionMaster::CustomJump(float x, float y, float z, float speedXY, float sp
     init.Launch();
     Mutate(new EffectMovementGenerator(id), MOTION_SLOT_CONTROLLED);
 }
+// new for gilnas
+
+void MotionMaster::MoveSmoothPath(uint32 pointId, Position const* pathPoints, size_t pathSize, bool walk, bool fly)
+{
+    Movement::MoveSplineInit init(_owner);
+
+    if (fly)
+    {
+        init.SetFly();
+        init.SetUncompressed();
+        init.SetSmooth();
+    }
+
+    Movement::PointsArray path;
+    path.reserve(pathSize);
+    std::transform(pathPoints, pathPoints + pathSize, std::back_inserter(path), [](Position const& point)
+        {
+            return G3D::Vector3(point.GetPositionX(), point.GetPositionY(), point.GetPositionZ());
+        });
+
+    init.MovebyPath(path);
+    init.SetWalk(walk);
+    init.Launch();
+
+    Mutate(new EffectMovementGenerator(pointId), MOTION_SLOT_ACTIVE);
+}
+
+
 
 void MotionMaster::MoveCirclePath(float x, float y, float z, float radius, bool clockwise, uint8 stepCount, float velocityOrDuration)
 {

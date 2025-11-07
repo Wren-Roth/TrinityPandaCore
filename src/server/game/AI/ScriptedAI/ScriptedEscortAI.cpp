@@ -378,14 +378,21 @@ void npc_escortAI::OnPossess(bool apply)
 }
 */
 
-void npc_escortAI::AddWaypoint(uint32 id, float x, float y, float z, uint32 waitTime)
+void npc_escortAI::AddWaypoint(uint32 id, float x, float y, float z, uint32 waitTime, bool jump)
 {
-    Escort_Waypoint t(id, x, y, z, waitTime);
-
+    Escort_Waypoint t(id, x, y, z, waitTime, jump);
     WaypointList.push_back(t);
+    ScriptWP = true;
+}
+
+//void npc_escortAI::AddWaypoint(uint32 id, float x, float y, float z, uint32 waitTime)
+//{
+  //  Escort_Waypoint t(id, x, y, z, waitTime);
+
+  //  WaypointList.push_back(t);
 
     // i think SD2 no longer uses this function
-    ScriptWP = true;
+ //   ScriptWP = true;
     /*PointMovement wp;
     wp.m_uiCreatureEntry = me->GetEntry();
     wp.m_uiPointId = id;
@@ -394,7 +401,7 @@ void npc_escortAI::AddWaypoint(uint32 id, float x, float y, float z, uint32 wait
     wp.m_fZ = z;
     wp.m_uiWaitTime = WaitTimeMs;
     PointMovementMap[wp.m_uiCreatureEntry].push_back(wp);*/
-}
+//}
 
 void npc_escortAI::FillPointMovementListForCreature()
 {
@@ -405,11 +412,10 @@ void npc_escortAI::FillPointMovementListForCreature()
     ScriptPointVector::const_iterator itrEnd = movePoints.end();
     for (ScriptPointVector::const_iterator itr = movePoints.begin(); itr != itrEnd; ++itr)
     {
-        Escort_Waypoint point(itr->uiPointId, itr->fX, itr->fY, itr->fZ, itr->uiWaitTime);
+        Escort_Waypoint point(itr->uiPointId, itr->fX, itr->fY, itr->fZ, itr->uiWaitTime, false);
         WaypointList.push_back(point);
     }
 }
-
 void npc_escortAI::SetRun(bool on)
 {
     if (on)
@@ -517,6 +523,7 @@ bool npc_escortAI::SetNextWaypoint(uint32 pointId, float x, float y, float z, fl
     return SetNextWaypoint(pointId, false, true);
 }
 
+
 bool npc_escortAI::SetNextWaypoint(uint32 pointId, bool setPosition, bool resetWaypointsOnFail)
 {
     if (!WaypointList.empty())
@@ -528,7 +535,7 @@ bool npc_escortAI::SetNextWaypoint(uint32 pointId, bool setPosition, bool resetW
         return false;
 
     size_t const size = WaypointList.size();
-    Escort_Waypoint waypoint(0, 0, 0, 0, 0);
+    Escort_Waypoint waypoint(0, 0, 0, 0, 0, false);
     do
     {
         waypoint = WaypointList.front();
@@ -541,8 +548,7 @@ bool npc_escortAI::SetNextWaypoint(uint32 pointId, bool setPosition, bool resetW
             CurrentWP = WaypointList.begin();
             return true;
         }
-    }
-    while (!WaypointList.empty());
+    } while (!WaypointList.empty());
 
     // we failed.
     // we reset the waypoints in the start; if we pulled any, reset it again

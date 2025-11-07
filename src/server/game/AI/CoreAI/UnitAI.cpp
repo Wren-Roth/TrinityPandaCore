@@ -195,6 +195,16 @@ void UnitAI::DoCast(SelectAggroTarget targetType, uint32 spellId, bool triggered
     if (target)
         me->CastSpell(target, spellId, triggered);
 }
+// for gilneas 
+
+void UnitAI::DoCastSelf(uint32 spellId, bool triggered)
+{
+    if (!triggered && me->HasUnitState(UNIT_STATE_CASTING))
+        return;
+
+    me->CastSpell(me, spellId, triggered);
+}
+
 
 void UnitAI::DoCastVictim(uint32 spellId, bool triggered)
 {
