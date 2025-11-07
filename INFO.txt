@@ -1,0 +1,44 @@
+MOP INFO
+
+
+COMPLETED FEATURES:
+
+Wandering isle = works, can finish
+
+gilneas = works, can finish
+
+pet battles = working.
+
+
+-------------------------------------------------------------
+current issues:
+
+kazan = being tested.
+
+
+
+--------------------------------------------------------------
+
+unknown issues:
+
+Brawlers guild = not yet scripted
+
+--------------------------------------------------------------
+
+
+to check:
+
+MOP dungeons = not yet tested
+
+MOP raids = not fully tested
+
+CATA dungeons = not yet tested
+
+CATA raids = not yet tested
+
+
+--------------------------------------------------------------
+
+wotlk tbc vanilla content = not yet tested
+
+--------------------------------------------------------------
