@@ -410,6 +410,23 @@ public:
         return true;
     }
 };
+class item_blood_soaked_invitation : public ItemScript
+{
+public:
+    item_blood_soaked_invitation() : ItemScript("item_blood_soaked_invitation") {}
+
+    bool OnUse(Player* player, Item* item, SpellCastTargets const& /*targets*/) override
+    {
+        player->SetReputation(1419, 1);
+        player->SetReputation(1374, 1);
+        return true;
+    }
+};
+
+
+
+
+
 
 // Primal Egg - 94295
 class item_primal_egg : public ItemScript
@@ -486,6 +503,7 @@ public:
 void AddSC_item_scripts()
 {
     new item_only_for_flight();
+    new item_blood_soaked_invitation();
     new item_nether_wraith_beacon();
     new item_gor_dreks_ointment();
     new item_incendiary_explosives();

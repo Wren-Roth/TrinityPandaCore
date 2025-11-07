@@ -48,6 +48,11 @@ class WorldObject;
 #define PrepareSpellScript(className) \
     static SpellScript* CreateSpellScript() { return new className(); }
 
+// Add this macro definition near the top of SpellScript.h, after includes and before any usage
+#define PrepareAuraScript(className) \
+    public: \
+        static AuraScript* CreateAuraScript() { return new className(); }
+
 
 enum SpellScriptState
 {

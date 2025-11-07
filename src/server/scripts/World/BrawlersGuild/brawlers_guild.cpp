@@ -266,13 +266,22 @@ enum MiscData
 
 struct brawlers_guild_encounter_typeAI : public ScriptedAI
 {
-    brawlers_guild_encounter_typeAI(Creature* creature) : ScriptedAI(creature), summons(me) { }
+    brawlers_guild_encounter_typeAI(Creature* creature)
+        : ScriptedAI(creature),
+        summons(me),
+        summonerGUID(0),
+        targetGUID(0),
+        challengeCardGUID(0),
+        hasTele(false),
+        hasYell(false)
+    {
+    }
 
     SummonList summons;
     EventMap events, nonCombatEvents;
     uint64 summonerGUID, targetGUID;
     uint64 challengeCardGUID;
-    bool hasTele, hasYell;
+    bool hasTele, hasYell;;
 
     void IsSummonedBy(Unit* summoner) override
     {
@@ -858,9 +867,11 @@ class npc_brawlers_guild_brawlgar_arena_grunt : public CreatureScript
 
                     // Queue player to arena
                     player->CastSpell(player, SPELL_QUEUED_FOR_BRAWL, true);
-
+                    
                     if (Creature* arenaHolder = player->FindNearestCreature(creature->GetMapId() == 1043 ? NPC_BOSS_BAZZELFLANGE : NPC_BIZMO, 100.0f, true))
                         arenaHolder->AI()->SetData(TYPE_IN_QUEUE, player->GetGUIDLow());
+                    
+                
                     break;
                 case GOSSIP_ACTION_INFO_DEF + 2:
                     // Get our Position in queue
@@ -922,11 +933,16 @@ class npc_brawlers_guild_brawlgar_arena_grunt : public CreatureScript
 
         struct npc_brawlers_guild_brawlgar_arena_gruntAI : public ScriptedAI
         {
-            npc_brawlers_guild_brawlgar_arena_gruntAI(Creature* creature) : ScriptedAI(creature) { }
+            npc_brawlers_guild_brawlgar_arena_gruntAI(Creature* creature)
+                : ScriptedAI(creature),
+                scheduler(),
+                queueYell(0)
+            {
+            }
 
             TaskScheduler scheduler;
             uint32 queueYell;
-    
+
             void Reset() override
             {
                 DoCast(me, SPELL_GUARD_AREATRIGGER);
@@ -971,7 +987,17 @@ class npc_brawlers_guild_brawlgar_arena_grunt : public CreatureScript
 // Boss Bazzelflange 67260
 struct npc_brawlers_guild_boss_bazzelflange : public ScriptedAI
 {
-    npc_brawlers_guild_boss_bazzelflange(Creature* creature) : ScriptedAI(creature) { }
+    npc_brawlers_guild_boss_bazzelflange(Creature* creature)
+        : ScriptedAI(creature),
+        scheduler(),
+        berserkerEvents(),
+        playersInQueue(),
+        challengeCardGUIDs(),
+        currentChampionGUID(0),
+        currentEncounterGUID(0),
+        hasQueueStarted(false)
+    {
+    }
 
     TaskScheduler scheduler;
     EventMap berserkerEvents;
@@ -1145,6 +1171,7 @@ struct npc_brawlers_guild_boss_bazzelflange : public ScriptedAI
                     currentChampionGUID = target->GetGUID();
 
                     uint32 currentRep = target->GetReputation(target->GetTeam() == HORDE ? FACTION_BRAWLGAR_ARENA : FACTION_BIZMO_BRAWLPUB);
+                    
                     // Hello word!
                     for (auto&& itr : reputationYellType)
                     {
