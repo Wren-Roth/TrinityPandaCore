@@ -34,6 +34,7 @@ EndContentData */
 
 #include "ScriptPCH.h"
 #include "../AI/SmartScripts/SmartAI.h"
+#include "SpellAuras.h"
 
 enum eYells
 {
@@ -82,6 +83,7 @@ enum eQuests
 {
     QUEST_ALLIANCE_WAY       = 30988,
     QUEST_AN_OLD_PIT_FIGHTER = 30989,
+	QUEST_EXTINGUISHING_HOPE = 26391,
 };
 
 enum eCreatures
@@ -104,6 +106,7 @@ enum eSpells
     SPELL_SNEAKING                 = 93046,
     SPELL_SPYGLASS                 = 80676,
     SPELL_VARIAN_GET_PUNCHED_SCENE = 120568, // SPELL_EFFECT_186 not implemented in core
+    SPELL_VISUAL_EXTINGUISHER = 80209,
 };
 
 enum eActions
@@ -1050,9 +1053,60 @@ struct npc_minion_of_hogger : public ScriptedAI
     }
 };
 
+
+class EXTINGUISHING_HOPE : public CreatureScript
+{
+public:
+    EXTINGUISHING_HOPE(const char* ScriptName) : CreatureScript(ScriptName) {}
+
+    bool OnQuestAccept(Player* player, Creature* creature, Quest const* quest)
+    {
+        if (quest->GetQuestId() == QUEST_EXTINGUISHING_HOPE)
+        {
+
+
+            player->CastSpell(player, SPELL_VISUAL_EXTINGUISHER, false);
+            creature->AI()->Talk(0);
+        }
+        return true;
+    }
+
+    bool OnQuestReward(Player* player, Creature* creature, Quest const* quest, uint32 /*opt*/)
+    {
+        if (quest->GetQuestId() == QUEST_EXTINGUISHING_HOPE)
+
+            player->RemoveAura(SPELL_VISUAL_EXTINGUISHER);
+
+
+
+        return true;
+    }
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new EXTINGUISHING_HOPEAI(creature);
+    }
+    struct EXTINGUISHING_HOPEAI : public ScriptedAI
+    {
+        EXTINGUISHING_HOPEAI(Creature* creature) : ScriptedAI(creature)
+        {
+            //me->SetReactState(REACT_PASSIVE);
+          //  me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            if (!UpdateVictim())
+                return;
+        }
+    };
+};
+
+
 void AddSC_elwynn_forest()
 {
     new npc_blackrock_spy();
+    new EXTINGUISHING_HOPE("EXTINGUISHING_HOPE2");
     new npc_goblin_assassin();
     new npc_blackrock_invader();
     new npc_stormwind_infantry();
