@@ -3,18 +3,27 @@ MOP INFO
 
 COMPLETED FEATURES:
 
-Wandering isle = works, can finish
 
-gilneas = works, can finish
+flightpaths = working.
 
 pet battles = working.
 
 Brawlers guild = working, up to rank 8. use item "Brawler's Guild rep fix" available from the vendor right beside bouncer.
 
+
+ZONES:
+
+Northshire - complete
+
+Wandering isle = works, can finish
+
+gilneas = works, can finish
+
+kazan = works, can finish
 -------------------------------------------------------------
 current issues:
 
-kazan = being tested.
+
 
 
 
