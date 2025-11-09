@@ -37,12 +37,15 @@ EndContentData */
 #include "TaskScheduler.h"
 #include "SpellScript.h"
 #include "UnitAI.h"
+#include "CreatureAI.h"
 
 
     enum WestfallQuest
     {
         QUEST_MURDER_WAS_THE_CASE_THAT_THEY_GAVE_ME = 26209,
-        QUEST_LOUS_PARTING_THOUGHTS = 26232
+        QUEST_LOUS_PARTING_THOUGHTS = 26232,
+        QUEST_THE_WESTFALL_BRIGADE = 26287,
+        QUEST_RISE_OF_THE_BROTHERHOOD = 26322
     };
 
     enum ThugText
@@ -75,6 +78,7 @@ EndContentData */
         EVENT_THUG_WARNING = 14
     };
 
+   
     enum ThugAction
     {
         ACTION_THUG_RESET = 1
@@ -178,10 +182,107 @@ public:
 };
 
 
+class westfall_brigade : public CreatureScript
+{
+public:
+    westfall_brigade(const char* ScriptName) : CreatureScript(ScriptName) {}
 
+
+
+
+    bool OnQuestAccept(Player* player, Creature* creature, Quest const* quest)
+    {
+        if (quest->GetQuestId() == QUEST_THE_WESTFALL_BRIGADE)
+        {
+
+
+            player->SetPhaseMask(4, true);
+        }
+        return true;
+    }
+
+    bool OnQuestReward(Player* player, Creature* creature, Quest const* quest, uint32 /*opt*/)
+    {
+        if (quest->GetQuestId() == QUEST_THE_WESTFALL_BRIGADE)
+
+            player->SetPhaseMask(1, true);
+
+
+
+        return true;
+
+
+    }
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new westfall_brigadeAI(creature);
+    }
+    struct westfall_brigadeAI : public ScriptedAI
+    {
+        westfall_brigadeAI(Creature* creature) : ScriptedAI(creature)
+        {
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            if (!UpdateVictim())
+                return;
+        }
+    };
+};
     
 
+class rise_of_the_brotherhood : public CreatureScript
+{
+public:
+    rise_of_the_brotherhood(const char* ScriptName) : CreatureScript(ScriptName) {}
 
+
+
+
+    bool OnQuestAccept(Player* player, Creature* creature, Quest const* quest)
+    {
+        if (quest->GetQuestId() == QUEST_RISE_OF_THE_BROTHERHOOD)
+        {
+
+            player->MonsterSay("I'll to Stormwind at once and alert the King!" , LANG_UNIVERSAL, player);
+            player->SetPhaseMask(2, true);
+			player->SetQuestStatus(QUEST_RISE_OF_THE_BROTHERHOOD, QUEST_STATUS_COMPLETE, true);
+        }
+        return true;
+    }
+
+    bool OnQuestReward(Player* player, Creature* creature, Quest const* quest, uint32 /*opt*/)
+    {
+        if (quest->GetQuestId() == QUEST_RISE_OF_THE_BROTHERHOOD)
+
+            player->SetPhaseMask(1, true);
+
+
+
+        return true;
+
+
+    }
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new westfall_brigadeAI(creature);
+    }
+    struct westfall_brigadeAI : public ScriptedAI
+    {
+        westfall_brigadeAI(Creature* creature) : ScriptedAI(creature)
+        {
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            if (!UpdateVictim())
+                return;
+        }
+    };
+};
 
 
 
@@ -194,4 +295,6 @@ void AddSC_westfall()
 {
     new spell_script<spell_westfall_wake_harvest_golem>("spell_westfall_wake_harvest_golem");
     new two_shoed_lou_thugs("two_shoed_lou_thugs");
+    new westfall_brigade("westfall_brigade");
+    new rise_of_the_brotherhood("rise_of_the_brotherhood");
 }
