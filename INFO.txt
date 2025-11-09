@@ -17,6 +17,10 @@ Northshire - complete
 
 Elwynn Forest = complete
 
+Westfall = can finish
+
+redridge = can finish
+
 Wandering isle = works, can finish
 
 gilneas = works, can finish
