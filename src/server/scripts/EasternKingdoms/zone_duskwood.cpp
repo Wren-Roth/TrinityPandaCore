@@ -25,7 +25,65 @@ SDComment: Quest Support:8735
 SDCategory: Duskwood
 EndScriptData */
 
+enum DuskWoodQuests
+{
+    QUEST_THE_EMBALMERS_REVENGE = 26727
+   
+};
+
+class the_embalmers_revenge : public CreatureScript
+{
+public:
+    the_embalmers_revenge(const char* ScriptName) : CreatureScript(ScriptName) {}
+
+
+
+
+    bool OnQuestAccept(Player* player, Creature* creature, Quest const* quest)
+    {
+        if (quest->GetQuestId() == QUEST_THE_EMBALMERS_REVENGE)
+        {
+
+
+            player->SetPhaseMask(2, true);
+
+        }
+        return true;
+    }
+
+    bool OnQuestReward(Player* player, Creature* creature, Quest const* quest, uint32 /*opt*/)
+    {
+        if (quest->GetQuestId() == QUEST_THE_EMBALMERS_REVENGE)
+
+            player->SetPhaseMask(1, true);
+
+
+
+        return true;
+
+
+    }
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new the_embalmers_revengeAI(creature);
+    }
+    struct the_embalmers_revengeAI : public ScriptedAI
+    {
+        the_embalmers_revengeAI(Creature* creature) : ScriptedAI(creature)
+        {
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            if (!UpdateVictim())
+                return;
+        }
+    };
+};
+
+
 void AddSC_duskwood()
 {
-
+    new the_embalmers_revenge("the_embalmers_revenge");
 }
