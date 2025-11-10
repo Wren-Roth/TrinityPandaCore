@@ -71,10 +71,21 @@ target_link_libraries(scripts
   PUBLIC
     game)
 
+if(USE_MODULES)
+	add_dependencies(scripts modules)
+	target_link_libraries(scripts
+		PRIVATE
+		modules)
+    target_compile_definitions(scripts PRIVATE USE_MODULES)
+endif()
+
 set_target_properties(scripts
     PROPERTIES
       FOLDER
         "server")
+
+
+
 
 # Generate precompiled header
 if (USE_SCRIPTPCH)

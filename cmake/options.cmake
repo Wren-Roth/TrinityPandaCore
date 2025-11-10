@@ -18,6 +18,7 @@ option(WITH_WARNINGS    "Show all warnings during compile"                      
 option(WITH_COREDEBUG   "Include additional debug-code in core"                       0)
 option(WITH_SANITIZER   "Build with AddressSanitizer"                                 0)
 option(UPDATER          "Build updater"                                               0)
+option(USE_MODULES      "Use modules system"   	                                      1)
 
 set(WITH_SOURCE_TREE    "hierarchical" CACHE STRING "Build the source tree for IDE's.")
 set_property(CACHE WITH_SOURCE_TREE PROPERTY STRINGS no flat hierarchical hierarchical-folders)

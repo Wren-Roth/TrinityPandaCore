@@ -1856,6 +1856,13 @@ void AddMaelstromScripts()
 #endif
 }
 
+#ifdef USE_MODULES
+
+extern void AddModulesScripts();
+
+#endif // USE_MODULES
+
+
 void AddEventScripts()
 {
 #ifdef SCRIPTS
@@ -2138,12 +2145,18 @@ void AddCustomScripts()
 {
 #ifdef SCRIPTS
     /* This is where custom scripts should be added. */
-AddSC_npc_teleport();
-AddSC_protected_zone();
-AddSC_Custom_Items();
+    AddSC_npc_teleport();
+    AddSC_protected_zone();
+    AddSC_Custom_Items();
 
 #endif
     AddSC_Anticheat();
+
+
+#ifdef USE_MODULES
+    AddModulesScripts();
+#endif // USE_MODULES
+
 }
 
 void AddScripts()

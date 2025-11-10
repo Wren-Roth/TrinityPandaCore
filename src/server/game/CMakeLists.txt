@@ -40,6 +40,7 @@ target_link_libraries(game-interface
     Detour
     )
 
+
 add_library(game
   ${PRIVATE_SOURCES})
 
@@ -52,6 +53,11 @@ target_link_libraries(game
     trinity-core-interface
   PUBLIC
     game-interface)
+
+if(USE_MODULES)
+    target_compile_definitions(game PRIVATE USE_MODULES)
+endif()
+
 
 set_target_properties(game
     PROPERTIES
