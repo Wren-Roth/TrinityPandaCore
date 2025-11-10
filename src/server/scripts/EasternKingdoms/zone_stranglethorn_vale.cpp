@@ -237,9 +237,103 @@ class npc_stranglethorn_priestess_hurala : public CreatureScript
 };
 
 
+enum piratestuff
+{
+    QUEST_THE_DAMSELS_BAD_LUCK = 26700,
+    QUEST_TURNING_THE_BRASHTIDE = 26699,
+    QUEST_DRIVE_BY_PIRACY = 26649,
+	QUEST_SINKING_FROM_WITHIN = 26663,
+    QUEST_THE_FINAL_VOYAGE = 26697
+};
+
+
+class drive_by_piracy : public CreatureScript
+{
+public:
+    drive_by_piracy() : CreatureScript("quest_drive_by_piracy") {}
+
+
+
+
+    bool OnQuestAccept(Player* player, Creature* creature, Quest const* quest)
+    {
+        if (player->GetQuestStatus(QUEST_DRIVE_BY_PIRACY))
+
+        {
+
+
+            player->CompleteQuest(26649, creature);
+
+        }
+		return true;
+    }
+
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new drive_by_piracyAI(creature);
+    }
+    struct drive_by_piracyAI : public ScriptedAI
+    {
+        drive_by_piracyAI(Creature* creature) : ScriptedAI(creature)
+        {
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            if (!UpdateVictim())
+                return;
+        }
+    };
+};
+
+
+class final_voyage : public CreatureScript
+{
+public:
+    final_voyage() : CreatureScript("final_voyage") {}
+
+
+
+
+    bool OnQuestAccept(Player* player, Creature* creature, Quest const* quest)
+    {
+        if (player->GetQuestStatus(QUEST_THE_FINAL_VOYAGE))
+
+        {
+
+
+            player->CompleteQuest(26697, creature);
+
+        }
+        return true;
+    }
+
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new final_voyageAI(creature);
+    }
+    struct final_voyageAI : public ScriptedAI
+    {
+        final_voyageAI(Creature* creature) : ScriptedAI(creature)
+        {
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            if (!UpdateVictim())
+                return;
+        }
+    };
+};
+
 void AddSC_stranglethorn_vale()
 {
     new npc_yenniku();
     new creature_script<npc_stranglethorn_emerine>("npc_stranglethorn_emerine");
     new npc_stranglethorn_priestess_hurala();
+	new final_voyage();
+    new drive_by_piracy();
+ 
 }
