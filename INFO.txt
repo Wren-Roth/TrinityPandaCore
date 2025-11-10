@@ -3,6 +3,10 @@ MOP INFO
 
 COMPLETED FEATURES:
 
+Module implementation = yes! config files for modules go directly into worldserver.conf
+
+Modules: leech
+---------------------------
 
 flightpaths = working.
 
@@ -10,6 +14,7 @@ pet battles = working.
 
 Brawlers guild = working, up to rank 8. use item "Brawler's Guild rep fix" available from the vendor right beside bouncer.
 
+Proving Grounds = Seems to work, i tried on a green geared shadowpriest and failed bronze.. should work all the way to gold.
 
 ZONES:
 
