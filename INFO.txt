@@ -23,6 +23,8 @@ redridge = can finish
 
 duskwood = can finish
 
+North stv = can finish
+
 Wandering isle = works, can finish
 
 gilneas = works, can finish
