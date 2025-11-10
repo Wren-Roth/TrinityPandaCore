@@ -178,6 +178,8 @@ enum priestessTypes
 {
     QUEST_SEE_RAPTOR_A = 26773,
     QUEST_SEE_RAPTOR_H = 26359,
+    QUEST_BE_RAPTOR_A = 26775,
+    QUEST_BE_RAPTOR_H = 26362,
     NPC_CAPTURED_LASHTAIL_HATCHLING = 42840,
 };
 
@@ -209,7 +211,31 @@ class npc_stranglethorn_priestess_hurala : public CreatureScript
             player->CLOSE_GOSSIP_MENU();
             return true;
         }
+
+        bool OnQuestAccept(Player* player, Creature* creature, Quest const* quest)
+        {
+            if (player->GetQuestStatus(QUEST_BE_RAPTOR_A))
+
+            {
+
+
+                player->CompleteQuest(26775, creature);
+
+            }
+            return true;
+
+            if (player->GetQuestStatus(QUEST_BE_RAPTOR_H))
+
+            {
+
+
+                player->CompleteQuest(26362, creature);
+
+            }
+            return true;
+        }
 };
+
 
 void AddSC_stranglethorn_vale()
 {
