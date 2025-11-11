@@ -5,7 +5,7 @@
 // Includes list
 void AddSC_mod_leech();
 void AddSC_mod_example();
-
+void AddSC_items_gearup();
 
 #include "ModulesLoader.h"
 
@@ -15,5 +15,6 @@ void AddModulesScripts()
     // Modules
         AddSC_mod_leech();
     AddSC_mod_example();
+    AddSC_items_gearup();
 
 }
