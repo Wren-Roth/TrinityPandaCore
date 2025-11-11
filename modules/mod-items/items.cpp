@@ -14,6 +14,9 @@ public:
 
         if (msg == "gearup" || msg == "GEARUP" || msg == "GearUp")
         {
+
+            player->ModifyMoney(200000);
+
             switch (player->getClass())
             {
             case CLASS_MAGE:
