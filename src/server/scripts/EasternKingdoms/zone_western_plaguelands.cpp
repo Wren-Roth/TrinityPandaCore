@@ -211,9 +211,57 @@ class spell_shadow_prison_gandling : public AuraScript
     }
 };
 
+
+enum zenkiki
+{
+    QUEST_A_DIFFERENT_APPROACH = 26954
+    
+};
+
+class a_different_approach : public CreatureScript
+{
+public:
+    a_different_approach() : CreatureScript("different_approach") {}
+
+
+
+
+    bool OnQuestAccept(Player* player, Creature* creature, Quest const* quest)
+    {
+        if (player->GetQuestStatus(QUEST_A_DIFFERENT_APPROACH))
+
+        {
+
+
+            player->CompleteQuest(26954, creature);
+
+        }
+        return true;
+    }
+
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new a_different_approachAI(creature);
+    }
+    struct a_different_approachAI : public ScriptedAI
+    {
+        a_different_approachAI(Creature* creature) : ScriptedAI(creature)
+        {
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            if (!UpdateVictim())
+                return;
+        }
+    };
+};
+
 void AddSC_western_plaguelands()
 {
     new creature_script<npc_dark_master_gandling_quest>("npc_dark_master_gandling_quest");
     new npc_thassarian_quest();
+	new a_different_approach();
     //new aura_script<spell_shadow_prison_gandling>("spell_shadow_prison_gandling");
 }
