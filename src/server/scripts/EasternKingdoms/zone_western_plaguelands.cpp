@@ -258,10 +258,56 @@ public:
     };
 };
 
+enum Nathaniel
+{
+    QUEST_THIS_MEANS_WAR = 27001
+
+};
+class this_means_war : public CreatureScript
+{
+public:
+    this_means_war() : CreatureScript("quest_this_means_war") {}
+
+
+
+
+    bool OnQuestAccept(Player* player, Creature* creature, Quest const* quest)
+    {
+        if (player->GetQuestStatus(QUEST_A_DIFFERENT_APPROACH))
+
+        {
+
+
+            player->CompleteQuest(27001, creature);
+
+        }
+        return true;
+    }
+
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new this_means_warAI(creature);
+    }
+    struct this_means_warAI : public ScriptedAI
+    {
+        this_means_warAI(Creature* creature) : ScriptedAI(creature)
+        {
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            if (!UpdateVictim())
+                return;
+        }
+    };
+};
+
 void AddSC_western_plaguelands()
 {
     new creature_script<npc_dark_master_gandling_quest>("npc_dark_master_gandling_quest");
     new npc_thassarian_quest();
 	new a_different_approach();
+	new this_means_war();
     //new aura_script<spell_shadow_prison_gandling>("spell_shadow_prison_gandling");
 }
