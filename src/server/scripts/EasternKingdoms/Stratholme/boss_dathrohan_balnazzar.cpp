@@ -43,7 +43,7 @@ enum Spells
     SPELL_MINDBLAST                 = 17287,
     SPELL_PSYCHICSCREAM             = 13704,
     SPELL_SLEEP                     = 12098,
-    SPELL_MINDCONTROL               = 15690
+  //  SPELL_MINDCONTROL               = 15690
 };
 
 enum Creatures
@@ -207,13 +207,13 @@ public:
                     m_uiDeepSleep_Timer = 15000;
                 } else m_uiDeepSleep_Timer -= uiDiff;
 
-                //MindControl
-                if (m_uiMindControl_Timer <= uiDiff)
-                {
-                    DoCastVictim(SPELL_MINDCONTROL);
-                    m_uiMindControl_Timer = 15000;
-                } else m_uiMindControl_Timer -= uiDiff;
-            }
+              //  //MindControl
+           //     if (m_uiMindControl_Timer <= uiDiff)
+            //    {
+            //        DoCastVictim(SPELL_MINDCONTROL);
+             //       m_uiMindControl_Timer = 15000;
+            //    } else m_uiMindControl_Timer -= uiDiff;
+           }
 
             DoMeleeAttackIfReady();
         }
