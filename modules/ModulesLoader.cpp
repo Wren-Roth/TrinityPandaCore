@@ -3,10 +3,11 @@
 #include <string>
 
 // Includes list
-void AddSC_balance_dungeon_boost();
+void AddSC_mod_balance();
+void AddSC_mod_items();
 void AddSC_mod_leech();
 void AddSC_mod_example();
-void AddSC_items_gearup();
+
 
 #include "ModulesLoader.h"
 
@@ -14,9 +15,9 @@ void AddSC_items_gearup();
 void AddModulesScripts()
 {
     // Modules
-	AddSC_balance_dungeon_boost();
+    AddSC_mod_balance();
+    AddSC_mod_items();
     AddSC_mod_leech();
     AddSC_mod_example();
-    AddSC_items_gearup();
 
 }
