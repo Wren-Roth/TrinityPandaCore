@@ -3,8 +3,8 @@
 #include <string>
 
 // Includes list
-void AddSC_mod_balance();
-void AddSC_mod_items();
+void AddSC_balance_dungeon_boost();
+void AddSC_items_gearup();
 void AddSC_mod_leech();
 void AddSC_mod_example();
 
@@ -15,8 +15,8 @@ void AddSC_mod_example();
 void AddModulesScripts()
 {
     // Modules
-        AddSC_mod_balance();
-    AddSC_mod_items();
+    AddSC_balance_dungeon_boost();
+    AddSC_items_gearup();
     AddSC_mod_leech();
     AddSC_mod_example();
 
