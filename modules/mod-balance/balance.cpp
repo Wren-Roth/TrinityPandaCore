@@ -1,574 +1,759 @@
+﻿
+/*
+* This file is part of the Pandaria 5.4.8 Project. See THANKS file for Copyright information
+*
+* This program is free software; you can redistribute it and/or modify it
+* under the terms of the GNU General Public License as published by the
+* Free Software Foundation; either version 2 of the License, or (at your
+* option) any later version.
+*
+* This program is distributed in the hope that it will be useful, but WITHOUT
+* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+* FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+* more details.
+*
+* You should have received a copy of the GNU General Public License along
+* with this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#include <map>
+#include "Config.h"
+#include "DatabaseEnv.h"
 #include "ScriptMgr.h"
+#include "Unit.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
+#include "Pet.h"
 #include "Map.h"
 #include "Group.h"
+#include "InstanceScript.h"
+#include "Chat.h"
 #include "Log.h"
+#include <math.h>
 #include <unordered_map>
-#include <algorithm> // for std::min
-#include <vector> // added for std::vector
-#include <cmath> // for std::pow
-#include "SpellScript.h"
-#include "Config.h"
 
-struct StatBackup
+enum SolocraftTrinityStrings
 {
-    int32 ap = 0;
-    uint32 spellPower = 0;
-    int32 stamina = 0;
-    int32 strength = 0;
-    int32 agility = 0;
-    int32 spirit = 0;
-    int32 intellect = 0;
-
-    // Applied percent mods (so we can remove them precisely)
-    float lastPercentStamina = 0.0f;
-    float lastPercentStrength = 0.0f;
-    float lastPercentAgility = 0.0f;
-    float lastPercentSpirit = 0.0f;
-    float lastPercentIntellect = 0.0f;
-
-    // Fallback: applied positive float unit-field deltas (client-visible)
-    float lastFlatStamina = 0.0f;
-    float lastFlatStrength = 0.0f;
-    float lastFlatAgility = 0.0f;
-    float lastFlatSpirit = 0.0f;
-    float lastFlatIntellect = 0.0f;
-
-    // Applied spellpower delta (signed)
-    int32 spApplied = 0;
-
-    // Track number of auras applied last time we checked (used to detect aura changes)
-    uint32 lastAuraCount = 0;
-
-    // Track last known alive state (so we can detect revive events)
-    bool lastWasAlive = true;
-
-    bool valid = false;
+    SOLOCRAFT_TRINITYSTRING_ACTIVE = 30000,    // |cff4CFF00SoloCraft system|r active.
+    SOLOCRAFT_TRINITYSTRING_STATUS = 30001,    // |cffFF0000[SoloCraft]|r |cffFF8000 %s entered %s - Difficulty Offset: %0.2f. Spellpower Bonus: %i. Class Balance Weight: %i. XP Gain: |cffFF0000%s XP Balancing:%s |cff4CFF00%s
+    SOLOCRAFT_TRINITYSTRING_ERR_LEVEL_TOO_HIGH = 30002,    // |cff4CFF00[SoloCraft]|r |cffFF0000 %s entered %s - |cffFF0000You have not been buffed.|r |cffFF8000Your level is higher than the max level (%i) threshold for this dungeon.
+    SOLOCRAFT_TRINITYSTRING_ERR_GROUP_ALREADY_BUFFED = 30003,    // |cffFF0000[SoloCraft]|r |cffFF8000 %s entered %s - |cffFF0000BE ADVISED - You have been debuffed by offset: %0.2f with a Class Balance Weight: %i. |cffFF8000A group member already inside has the dungeon's full buff offset. No Spellpower buff will be applied to spell casters. ALL group members must exit the dungeon and re-enter to receive a balanced offset.
+    SOLOCRAFT_TRINITYSTRING_CLEAR_BUFFS = 30004,    // |cffFF0000[SoloCraft]|r |cffFF8000 %s exited to %s - Reverting Difficulty Offset: %0.2f. Spellpower Bonus Removed: %i 
+    SOLOCRAFT_TRINITYSTRING_ENABLED = 30005,    // Enabled
+    SOLOCRAFT_TRINITYSTRING_DISABLED = 30006,    // Disabled
 };
 
-class mod_balance : public PlayerScript
+class SolocraftConfig
 {
 public:
-    mod_balance() : PlayerScript("balance_dungeon_boost")
-    {
-        TC_LOG_INFO("module.balance", "balance_dungeon_boost ctor called");
-        boostPerMissing = sConfigMgr->GetFloatDefault("DungeonBoost.PerMissing", 0.03f);
 
-        // New tunables
-        maxTotalBoost = sConfigMgr->GetFloatDefault("DungeonBoost.MaxTotal", 0.50f);        // e.g. 50% cap
-        diminishingExp = sConfigMgr->GetFloatDefault("DungeonBoost.DiminishingExp", 0.5f); // e.g. sqrt scaling
+    SolocraftConfig()
+    {
+        loadConfig();
     }
 
-    static std::unordered_map<uint64, StatBackup> statMap;
-    static float boostPerMissing;
+    static SolocraftConfig& getInstance() {
+        static SolocraftConfig instance;
+        return instance;
+    }
 
-    // New config tunables to limit/shape boost
-    static float maxTotalBoost;
-    static float diminishingExp;
+    void loadConfig()
+    {
+        SoloCraftEnable = sConfigMgr->GetBoolDefault("Solocraft.Enable", 0);
+        SoloCraftAnnounceModule = sConfigMgr->GetBoolDefault("Solocraft.Announce", 1);
+        SoloCraftDebuffEnable = sConfigMgr->GetBoolDefault("SoloCraft.Debuff.Enable", 1);
+        SoloCraftSpellMult = sConfigMgr->GetFloatDefault("SoloCraft.Spellpower.Mult", 2.5);
+        SoloCraftStatsMult = sConfigMgr->GetFloatDefault("SoloCraft.Stats.Mult", 100.0);
 
+        classes =
+        {
+            {1, sConfigMgr->GetIntDefault("SoloCraft.Warrior", 100) },
+            {2, sConfigMgr->GetIntDefault("SoloCraft.Paladin", 100) },
+            {3, sConfigMgr->GetIntDefault("SoloCraft.Hunter", 100) },
+            {4, sConfigMgr->GetIntDefault("SoloCraft.Rogue", 100) },
+            {5, sConfigMgr->GetIntDefault("SoloCraft.Priest", 100) },
+            {6, sConfigMgr->GetIntDefault("SoloCraft.Death.Knight", 100) },
+            {7, sConfigMgr->GetIntDefault("SoloCraft.Shaman", 100) },
+            {8, sConfigMgr->GetIntDefault("SoloCraft.Mage", 100) },
+            {9, sConfigMgr->GetIntDefault("SoloCraft.Warlock", 100) },
+            {10, sConfigMgr->GetIntDefault("SoloCraft.Monk", 100) },
+            {11, sConfigMgr->GetIntDefault("SoloCraft.Druid", 100) },
+        };
+
+        SolocraftXPEnabled = sConfigMgr->GetBoolDefault("Solocraft.XP.Enabled", 1);
+        SolocraftXPBalancingEnabled = sConfigMgr->GetBoolDefault("Solocraft.XP.Balancing.Enabled", 1);
+        SolocraftLevelDiff = sConfigMgr->GetIntDefault("Solocraft.Max.Level.Diff", 10);
+        SolocraftDungeonLevel = sConfigMgr->GetIntDefault("Solocraft.Dungeon.Level", 90);
+
+        dungeons =
+        {
+            /// VANILLA
+            {34, sConfigMgr->GetIntDefault("Solocraft.Stockades.Level", 22) },
+            {43, sConfigMgr->GetIntDefault("Solocraft.WailingCaverns.Level", 17) },
+            {47, sConfigMgr->GetIntDefault("Solocraft.RazorfenKraul.Level", 30) },
+            {48, sConfigMgr->GetIntDefault("Solocraft.BlackfathomDeeps.Level", 20) },
+            {70, sConfigMgr->GetIntDefault("Solocraft.Uldaman.Level", 40) },
+            {90, sConfigMgr->GetIntDefault("Solocraft.Gnomeregan.Level", 24) },
+            {109, sConfigMgr->GetIntDefault("Solocraft.SunkenTemple.Level", 50) },
+            {129, sConfigMgr->GetIntDefault("Solocraft.RazorfenDowns.Level", 40) },
+            {209, sConfigMgr->GetIntDefault("Solocraft.ZulFarrak.Level", 44) },
+            {229, sConfigMgr->GetIntDefault("Solocraft.BlackRockSpire.Level", 55) },
+            {230, sConfigMgr->GetIntDefault("Solocraft.BlackrockDepths.Level", 50) },
+            {249, sConfigMgr->GetIntDefault("Solocraft.OnyxiaLair.Level", 60) },
+            {329, sConfigMgr->GetIntDefault("Solocraft.Stratholme.Level", 55) },
+            {349, sConfigMgr->GetIntDefault("Solocraft.Mauradon.Level", 48) },
+            {389, sConfigMgr->GetIntDefault("Solocraft.RagefireChasm.Level", 15) },
+            {409, sConfigMgr->GetIntDefault("Solocraft.MoltenCore.Level", 60) },
+            {429, sConfigMgr->GetIntDefault("Solocraft.DireMaul.Level", 48) },
+            {469, sConfigMgr->GetIntDefault("Solocraft.BlackwingLair.Level", 40) },
+            {509, sConfigMgr->GetIntDefault("Solocraft.RuinsOfAhnQiraj.Level", 60) },
+            {531, sConfigMgr->GetIntDefault("Solocraft.TempleOfAhnQiraj.Level", 60) },
+            /// BURNING CRUSADE
+            {269, sConfigMgr->GetIntDefault("Solocraft.TheBlackMorass.Level", 68) },
+            {532, sConfigMgr->GetIntDefault("Solocraft.Karazahn.Level", 68) },
+            {534, sConfigMgr->GetIntDefault("Solocraft.TheBattleForMountHyjal.Level", 70) },
+            {540, sConfigMgr->GetIntDefault("Solocraft.TheShatteredHalls.Level", 68) },
+            {542, sConfigMgr->GetIntDefault("Solocraft.TheBloodFurnace.Level", 68) },
+            {543, sConfigMgr->GetIntDefault("Solocraft.HellfireRampart.Level", 68) },
+            {544, sConfigMgr->GetIntDefault("Solocraft.MagtheridonsLair.Level", 68) },
+            {545, sConfigMgr->GetIntDefault("Solocraft.TheSteamVault.Level", 68) },
+            {546, sConfigMgr->GetIntDefault("Solocraft.TheUnderbog.Level", 68) },
+            {547, sConfigMgr->GetIntDefault("Solocraft.TheSlavePens.Level", 68) },
+            {548, sConfigMgr->GetIntDefault("Solocraft.SerpentshrineCavern.Level", 70) },
+            {550, sConfigMgr->GetIntDefault("Solocraft.TheEye.Level", 70) },
+            {552, sConfigMgr->GetIntDefault("Solocraft.TheArcatraz.Level", 68) },
+            {553, sConfigMgr->GetIntDefault("Solocraft.TheBotanica.Level", 68) },
+            {554, sConfigMgr->GetIntDefault("Solocraft.TheMechanar.Level", 68) },
+            {555, sConfigMgr->GetIntDefault("Solocraft.ShadowLabyrinth.Level", 68) },
+            {556, sConfigMgr->GetIntDefault("Solocraft.SethekkHalls.Level", 68) },
+            {557, sConfigMgr->GetIntDefault("Solocraft.ManaTombs.Level", 68) },
+            {558, sConfigMgr->GetIntDefault("Solocraft.AuchenaiCrypts.Level", 68) },
+            {560, sConfigMgr->GetIntDefault("Solocraft.OldHillsbradFoothills.Level", 68) },
+            {564, sConfigMgr->GetIntDefault("Solocraft.BlackTemple.Level", 70) },
+            {565, sConfigMgr->GetIntDefault("Solocraft.GruulsLair.Level", 70) },
+            {580, sConfigMgr->GetIntDefault("Solocraft.SunwellPlateau.Level", 70) },
+            {585, sConfigMgr->GetIntDefault("Solocraft.MagistersTerrace.Level", 68) },
+            /// WRATH OF THE LICH KING
+            {533, sConfigMgr->GetIntDefault("Solocraft.Naxxramas.Level", 78) },
+            {574, sConfigMgr->GetIntDefault("Solocraft.UtgardeKeep.Level", 78) },
+            {575, sConfigMgr->GetIntDefault("Solocraft.UtgardePinnacle.Level", 78) },
+            {578, sConfigMgr->GetIntDefault("Solocraft.Oculus.Level", 78) },
+            {595, sConfigMgr->GetIntDefault("Solocraft.TheCullingOfStratholme.Level", 78) },
+            {599, sConfigMgr->GetIntDefault("Solocraft.HallsOfStone.Level", 78) },
+            {600, sConfigMgr->GetIntDefault("Solocraft.DrakTharonKeep.Level", 78) },
+            {601, sConfigMgr->GetIntDefault("Solocraft.AzjolNerub.Level", 78) },
+            {602, sConfigMgr->GetIntDefault("Solocraft.HallsOfLighting.Level", 78) },
+            {603, sConfigMgr->GetIntDefault("Solocraft.Ulduar.Level", 80) },
+            {604, sConfigMgr->GetIntDefault("Solocraft.GunDrak.Level", 78) },
+            {608, sConfigMgr->GetIntDefault("Solocraft.VioletHold.Level", 78) },
+            {615, sConfigMgr->GetIntDefault("Solocraft.TheObsidianSanctum.Level", 80) },
+            {616, sConfigMgr->GetIntDefault("Solocraft.TheEyeOfEternity.Level", 80) },
+            {619, sConfigMgr->GetIntDefault("Solocraft.AhnkahetTheOldKingdom.Level", 78) },
+            {631, sConfigMgr->GetIntDefault("Solocraft.IcecrownCitadel.Level", 80) },
+            {632, sConfigMgr->GetIntDefault("Solocraft.TheForgeOfSouls.Level", 78) },
+            {649, sConfigMgr->GetIntDefault("Solocraft.TrialOfTheCrusader.Level", 80) },
+            {650, sConfigMgr->GetIntDefault("Solocraft.TrialOfTheChampion.Level", 80) },
+            {658, sConfigMgr->GetIntDefault("Solocraft.PitOfSaron.Level", 78) },
+            {668, sConfigMgr->GetIntDefault("Solocraft.HallsOfReflection.Level", 78) },
+            {724, sConfigMgr->GetIntDefault("Solocraft.TheRubySanctum.Level", 80) },
+            /// CATACLYSM
+            {33, sConfigMgr->GetIntDefault("Solocraft.ShadowfangKeep.Level", 85) },
+            {36, sConfigMgr->GetIntDefault("Solocraft.DeadMines.Level", 85) },
+            {645, sConfigMgr->GetIntDefault("Solocraft.BlackrockCaverns.Level", 85) },
+            {643, sConfigMgr->GetIntDefault("Solocraft.ThroneOfTheTides.Level", 85) },
+            {657, sConfigMgr->GetIntDefault("Solocraft.TheVortexPinnacle.Level", 85) },
+            {725, sConfigMgr->GetIntDefault("Solocraft.TheStonecore.Level", 85) },
+            {755, sConfigMgr->GetIntDefault("Solocraft.LostCityOfTheTol'vir.Level", 85) },
+            {644, sConfigMgr->GetIntDefault("Solocraft.HallsOfOrigination.Level", 85) },
+            {670, sConfigMgr->GetIntDefault("Solocraft.GrimBatol.Level", 85) },
+            {669, sConfigMgr->GetIntDefault("Solocraft.BlackwingDescent.Level", 85) },
+            {671, sConfigMgr->GetIntDefault("Solocraft.TheBastionOfTwilight.Level", 85) },
+            {754, sConfigMgr->GetIntDefault("Solocraft.ThroneOfTheFourWinds.Level", 85) },
+            {757, sConfigMgr->GetIntDefault("Solocraft.BaradinHold.Level", 85) },
+            {720, sConfigMgr->GetIntDefault("Solocraft.Firelands.Level", 85) },
+            {967, sConfigMgr->GetIntDefault("Solocraft.DragonSoul.Level", 85) },
+            {938, sConfigMgr->GetIntDefault("Solocraft.EndTime.Level", 85) },
+            {939, sConfigMgr->GetIntDefault("Solocraft.WellOfEternity.Level", 85) },
+            {940, sConfigMgr->GetIntDefault("Solocraft.HourOfTwilight.Level", 85) },
+            {859, sConfigMgr->GetIntDefault("Solocraft.Zul'gurub.Level", 85) },
+            {568, sConfigMgr->GetIntDefault("Solocraft.ZulAman.Level", 85) },
+            {576, sConfigMgr->GetIntDefault("Solocraft.Nexus.Level", 85) },
+            /// MISTS OF PANDARIA
+            {959, sConfigMgr->GetIntDefault("Solocraft.ShadoPanMonastery.Level", 90) },
+            {1007, sConfigMgr->GetIntDefault("Solocraft.Scholomance.Level", 90) },
+            {1004, sConfigMgr->GetIntDefault("Solocraft.ScarletMonastery.Level", 90) },
+            {994, sConfigMgr->GetIntDefault("Solocraft.Mogu'shanPalace.Level", 90) },
+            {1008, sConfigMgr->GetIntDefault("Solocraft.Mogu'shanVaults.Level", 90) },
+            {1136, sConfigMgr->GetIntDefault("Solocraft.SiegeOfOrgrimmar.Level", 90) },
+            {1098, sConfigMgr->GetIntDefault("Solocraft.ThroneOfThunder.Level", 90) },
+            {1009, sConfigMgr->GetIntDefault("Solocraft.HeartOfFear.Level", 90) },
+            {996, sConfigMgr->GetIntDefault("Solocraft.TerraceOfEndlessSpring.Level", 90) },
+            {1001, sConfigMgr->GetIntDefault("Solocraft.ScarletHalls.Level", 90) },
+            {962, sConfigMgr->GetIntDefault("Solocraft.GateOfTheSettingSun.Level", 90) },
+            {1011, sConfigMgr->GetIntDefault("Solocraft.SiegeOfNiuzaoTemple.Level", 90) },
+            {960, sConfigMgr->GetIntDefault("Solocraft.TempleOfTheJadeSerpent.Level", 90) },
+            {961, sConfigMgr->GetIntDefault("Solocraft.StormstoutBrewery.Level", 90) },
+        };
+
+        // Dungeon difficulty
+        D5 = sConfigMgr->GetFloatDefault("Solocraft.Dungeon", 5.0);
+        D10 = sConfigMgr->GetFloatDefault("Solocraft.Heroic", 10.0);
+        D25 = sConfigMgr->GetFloatDefault("Solocraft.Raid25", 25.0);
+        D40 = sConfigMgr->GetFloatDefault("Solocraft.Raid40", 40.0);
+        // Множитель (обычный)
+        diff_Multiplier =
+        {
+            /// VANILLA
+            {34, sConfigMgr->GetFloatDefault("Solocraft.Stockades", 5.0) },
+            {43, sConfigMgr->GetFloatDefault("Solocraft.WailingCaverns", 5.0) },
+            {47, sConfigMgr->GetFloatDefault("Solocraft.RazorfenKraul", 5.0) },
+            {48, sConfigMgr->GetFloatDefault("Solocraft.BlackfathomDeeps", 5.0) },
+            {70, sConfigMgr->GetFloatDefault("Solocraft.Uldaman", 5.0) },
+            {90, sConfigMgr->GetFloatDefault("Solocraft.Gnomeregan", 5.0) },
+            {109, sConfigMgr->GetFloatDefault("Solocraft.SunkenTemple", 5.0) },
+            {129, sConfigMgr->GetFloatDefault("Solocraft.RazorfenDowns", 5.0) },
+            {209, sConfigMgr->GetFloatDefault("Solocraft.ZulFarrak", 5.0) },
+            {229, sConfigMgr->GetFloatDefault("Solocraft.BlackRockSpire", 10.0) },
+            {230, sConfigMgr->GetFloatDefault("Solocraft.BlackrockDepths", 5.0) },
+            {249, sConfigMgr->GetFloatDefault("Solocraft.OnyxiaLair", 40.0) },
+            {329, sConfigMgr->GetFloatDefault("Solocraft.Stratholme", 5.0) },
+            {349, sConfigMgr->GetFloatDefault("Solocraft.Mauradon", 5.0) },
+            {389, sConfigMgr->GetFloatDefault("Solocraft.RagefireChasm", 5.0) },
+            {409, sConfigMgr->GetFloatDefault("Solocraft.MoltenCore", 40.0) },
+            {429, sConfigMgr->GetFloatDefault("Solocraft.DireMaul", 5.0) },
+            {469, sConfigMgr->GetFloatDefault("Solocraft.BlackwingLair", 40.0) },
+            {509, sConfigMgr->GetFloatDefault("Solocraft.RuinsOfAhnQiraj", 20.0) },
+            {531, sConfigMgr->GetFloatDefault("Solocraft.TempleOfAhnQiraj", 40.0) },
+            /// BURNING CRUSADE
+            {269, sConfigMgr->GetFloatDefault("Solocraft.TheBlackMorass", 5.0) },
+            {532, sConfigMgr->GetFloatDefault("Solocraft.Karazahn", 10.0) },
+            {534, sConfigMgr->GetFloatDefault("Solocraft.TheBattleForMountHyjal", 25.0) },
+            {540, sConfigMgr->GetFloatDefault("Solocraft.TheShatteredHalls", 5.0) },
+            {542, sConfigMgr->GetFloatDefault("Solocraft.TheBloodFurnace", 5.0) },
+            {543, sConfigMgr->GetFloatDefault("Solocraft.HellfireRampart", 5.0) },
+            {544, sConfigMgr->GetFloatDefault("Solocraft.MagtheridonsLair", 25.0) },
+            {545, sConfigMgr->GetFloatDefault("Solocraft.TheSteamVault", 5.0) },
+            {546, sConfigMgr->GetFloatDefault("Solocraft.TheUnderbog", 5.0) },
+            {547, sConfigMgr->GetFloatDefault("Solocraft.TheSlavePens", 5.0) },
+            {548, sConfigMgr->GetFloatDefault("Solocraft.SerpentshrineCavern", 25.0) },
+            {550, sConfigMgr->GetFloatDefault("Solocraft.TheEye", 25.0) },
+            {552, sConfigMgr->GetFloatDefault("Solocraft.TheArcatraz", 5.0) },
+            {553, sConfigMgr->GetFloatDefault("Solocraft.TheBotanica", 5.0) },
+            {554, sConfigMgr->GetFloatDefault("Solocraft.TheMechanar", 5.0) },
+            {555, sConfigMgr->GetFloatDefault("Solocraft.ShadowLabyrinth", 5.0) },
+            {556, sConfigMgr->GetFloatDefault("Solocraft.SethekkHalls", 5.0) },
+            {557, sConfigMgr->GetFloatDefault("Solocraft.ManaTombs", 5.0) },
+            {558, sConfigMgr->GetFloatDefault("Solocraft.AuchenaiCrypts", 5.0) },
+            {560, sConfigMgr->GetFloatDefault("Solocraft.OldHillsbradFoothills", 5.0) },
+            {564, sConfigMgr->GetFloatDefault("Solocraft.BlackTemple", 25.0) },
+            {565, sConfigMgr->GetFloatDefault("Solocraft.GruulsLair", 25.0) },
+            {580, sConfigMgr->GetFloatDefault("Solocraft.SunwellPlateau", 25.0) },
+            {585, sConfigMgr->GetFloatDefault("Solocraft.MagistersTerrace", 5.0) },
+            /// WRATH OF THE LICH KING
+            {533, sConfigMgr->GetFloatDefault("Solocraft.Naxxramas", 10.0) },
+            {574, sConfigMgr->GetFloatDefault("Solocraft.UtgardeKeep", 5.0) },
+            {575, sConfigMgr->GetFloatDefault("Solocraft.UtgardePinnacle", 5.0) },
+            {578, sConfigMgr->GetFloatDefault("Solocraft.Oculus", 5.0) },
+            {595, sConfigMgr->GetFloatDefault("Solocraft.TheCullingOfStratholme", 5.0) },
+            {599, sConfigMgr->GetFloatDefault("Solocraft.HallsOfStone", 5.0) },
+            {600, sConfigMgr->GetFloatDefault("Solocraft.DrakTharonKeep", 5.0) },
+            {601, sConfigMgr->GetFloatDefault("Solocraft.AzjolNerub", 5.0) },
+            {602, sConfigMgr->GetFloatDefault("Solocraft.HallsOfLighting", 5.0) },
+            {603, sConfigMgr->GetFloatDefault("Solocraft.Ulduar", 10.0) },
+            {604, sConfigMgr->GetFloatDefault("Solocraft.GunDrak", 5.0) },
+            {608, sConfigMgr->GetFloatDefault("Solocraft.VioletHold", 5.0) },
+            {615, sConfigMgr->GetFloatDefault("Solocraft.TheObsidianSanctum", 10.0) },
+            {616, sConfigMgr->GetFloatDefault("Solocraft.TheEyeOfEternity", 10.0) },
+            {619, sConfigMgr->GetFloatDefault("Solocraft.AhnkahetTheOldKingdom", 5.0) },
+            {631, sConfigMgr->GetFloatDefault("Solocraft.IcecrownCitadel", 10.0) },
+            {632, sConfigMgr->GetFloatDefault("Solocraft.TheForgeOfSouls", 5.0) },
+            {649, sConfigMgr->GetFloatDefault("Solocraft.TrialOfTheCrusader", 10.0) },
+            {650, sConfigMgr->GetFloatDefault("Solocraft.TrialOfTheChampion", 5.0) },
+            {658, sConfigMgr->GetFloatDefault("Solocraft.PitOfSaron", 5.0) },
+            {668, sConfigMgr->GetFloatDefault("Solocraft.HallsOfReflection", 5.0) },
+            {724, sConfigMgr->GetFloatDefault("Solocraft.TheRubySanctum", 10.0) },
+            /// CATACLYSM
+            {33, sConfigMgr->GetFloatDefault("Solocraft.ShadowfangKeep", 5.0) }, // ShadowfangKeep
+            {36, sConfigMgr->GetFloatDefault("Solocraft.DeadMines", 5.0) }, // DeadMines
+            {645, sConfigMgr->GetFloatDefault("Solocraft.BlackrockCaverns", 5.0) }, // BlackrockCaverns
+            {643, sConfigMgr->GetFloatDefault("Solocraft.ThroneOfTheTides", 5.0) }, // Трон Приливов
+            {657, sConfigMgr->GetFloatDefault("Solocraft.TheVortexPinnacle", 5.0) }, // Вершина Смерча
+            {725, sConfigMgr->GetFloatDefault("Solocraft.TheStonecore", 5.0) }, // Каменные Недра
+            {755, sConfigMgr->GetFloatDefault("Solocraft.LostCityOfTheTol'vir", 5.0) }, // Затерянный город Тол'вир
+            {644, sConfigMgr->GetFloatDefault("Solocraft.HallsOfOrigination", 5.0) }, // Чертоги Созидания
+            {670, sConfigMgr->GetFloatDefault("Solocraft.GrimBatol", 5.0) }, // Грим Батол
+            {669, sConfigMgr->GetFloatDefault("Solocraft.BlackwingDescent", 10.0) }, // Твердыня Крыла Тьмы
+            {671, sConfigMgr->GetFloatDefault("Solocraft.TheBastionOfTwilight", 10.0) }, // Сумеречный бастион
+            {754, sConfigMgr->GetFloatDefault("Solocraft.ThroneOfTheFourWinds", 10.0) }, // Трон Четырех Ветров
+            {757, sConfigMgr->GetFloatDefault("Solocraft.BaradinHold", 10.0) }, // Крепость Барадин
+            {720, sConfigMgr->GetFloatDefault("Solocraft.Firelands", 10.0) }, // Огненные Просторы
+            {967, sConfigMgr->GetFloatDefault("Solocraft.DragonSoul", 10.0) }, // Душа Дракона
+            {859, sConfigMgr->GetFloatDefault("Solocraft.Zul'gurub", 5.0) }, // Зул'Гуруб
+            {568, sConfigMgr->GetFloatDefault("Solocraft.ZulAman", 5.0) }, // Зул'Аман
+            {576, sConfigMgr->GetFloatDefault("Solocraft.Nexus", 5.0) }, // Нексус
+            /// MISTS OF PANDARIA
+            {959, sConfigMgr->GetFloatDefault("Solocraft.ShadoPanMonastery", 5.0) }, // Монастырь Шадо-Пан
+            {1007, sConfigMgr->GetFloatDefault("Solocraft.Scholomance", 5.0) }, // Некроситет
+            {1004, sConfigMgr->GetFloatDefault("Solocraft.ScarletMonastery", 5.0) }, // Монастырь Алого ордена
+            {994, sConfigMgr->GetFloatDefault("Solocraft.Mogu'shanPalace", 5.0) }, // Дворец Могу'шан
+            {1008, sConfigMgr->GetFloatDefault("Solocraft.Mogu'shanVaults", 10.0) }, // Подземелья Могу'шан
+            {1136, sConfigMgr->GetFloatDefault("Solocraft.SiegeOfOrgrimmar", 10.0) }, // Осада Оргриммара
+            {1098, sConfigMgr->GetFloatDefault("Solocraft.ThroneOfThunder", 10.0) }, // Престол Гроз
+            {1009, sConfigMgr->GetFloatDefault("Solocraft.HeartOfFear", 10.0) }, // Сердце Страха
+            {996, sConfigMgr->GetFloatDefault("Solocraft.TerraceOfEndlessSpring", 10.0) }, // Терраса Вечной Весны
+            {1001, sConfigMgr->GetFloatDefault("Solocraft.ScarletHalls", 5.0) }, // Залы Алого ордена
+            {962, sConfigMgr->GetFloatDefault("Solocraft.GateOfTheSettingSun", 5.0) }, // Врата Заходящего Солнца
+            {1011, sConfigMgr->GetFloatDefault("Solocraft.SiegeOfNiuzaoTemple", 5.0) }, // Осада храма Нюцзао
+            {960, sConfigMgr->GetFloatDefault("Solocraft.TempleOfTheJadeSerpent", 5.0) }, // Храм Нефритовой Змеи
+            {961, sConfigMgr->GetFloatDefault("Solocraft.StormstoutBrewery", 5.0) }, // Хмелеварня Буйных Портеров
+        };
+        // diff_Multiplier_Heroics
+        diff_Multiplier_Heroics =
+        {
+            /// BURNING CRUSADE
+            {269, sConfigMgr->GetFloatDefault("Solocraft.TheBlackMorassH", 5.0) },
+            {540, sConfigMgr->GetFloatDefault("Solocraft.TheShatteredHallsH", 5.0) },
+            {542, sConfigMgr->GetFloatDefault("Solocraft.TheBloodFurnaceH", 5.0) },
+            {543, sConfigMgr->GetFloatDefault("Solocraft.HellfireRampartH", 5.0) },
+            {545, sConfigMgr->GetFloatDefault("Solocraft.TheSteamVaultH", 5.0) },
+            {546, sConfigMgr->GetFloatDefault("Solocraft.TheUnderbogH", 5.0) },
+            {547, sConfigMgr->GetFloatDefault("Solocraft.TheSlavePensH", 5.0) },
+            {552, sConfigMgr->GetFloatDefault("Solocraft.TheArcatrazH", 5.0) },
+            {553, sConfigMgr->GetFloatDefault("Solocraft.TheBotanicaH", 5.0) },
+            {554, sConfigMgr->GetFloatDefault("Solocraft.TheMechanarH", 5.0) },
+            {555, sConfigMgr->GetFloatDefault("Solocraft.ShadowLabyrinthH", 5.0) },
+            {556, sConfigMgr->GetFloatDefault("Solocraft.SethekkHallsH", 5.0) },
+            {557, sConfigMgr->GetFloatDefault("Solocraft.ManaTombsH", 5.0) },
+            {558, sConfigMgr->GetFloatDefault("Solocraft.AuchenaiCryptsH", 5.0) },
+            {560, sConfigMgr->GetFloatDefault("Solocraft.OldHillsbradFoothillsH", 5.0) },
+            {585, sConfigMgr->GetFloatDefault("Solocraft.MagistersTerraceH", 5.0) },
+            /// WRATH OF THE LICH KING
+            {533, sConfigMgr->GetFloatDefault("Solocraft.NaxxramasH", 25.0) },
+            {574, sConfigMgr->GetFloatDefault("Solocraft.UtgardeKeepH", 5.0) },
+            {575, sConfigMgr->GetFloatDefault("Solocraft.UtgardePinnacleH", 5.0) },
+            {578, sConfigMgr->GetFloatDefault("Solocraft.OculusH", 5.0) },
+            {595, sConfigMgr->GetFloatDefault("Solocraft.TheCullingOfStratholmeH", 5.0) },
+            {599, sConfigMgr->GetFloatDefault("Solocraft.HallsOfStoneH", 5.0) },
+            {600, sConfigMgr->GetFloatDefault("Solocraft.DrakTharonKeepH", 5.0) },
+            {601, sConfigMgr->GetFloatDefault("Solocraft.AzjolNerubH", 5.0) },
+            {602, sConfigMgr->GetFloatDefault("Solocraft.HallsOfLightingH", 5.0) },
+            {603, sConfigMgr->GetFloatDefault("Solocraft.UlduarH", 25.0) },
+            {604, sConfigMgr->GetFloatDefault("Solocraft.GunDrakH", 5.0) },
+            {608, sConfigMgr->GetFloatDefault("Solocraft.VioletHoldH", 5.0) },
+            {615, sConfigMgr->GetFloatDefault("Solocraft.TheObsidianSanctumH", 25.0) },
+            {616, sConfigMgr->GetFloatDefault("Solocraft.TheEyeOfEternityH", 25.0) },
+            {619, sConfigMgr->GetFloatDefault("Solocraft.AhnkahetTheOldKingdomH", 5.0) },
+            {631, sConfigMgr->GetFloatDefault("Solocraft.IcecrownCitadelH", 25.0) },
+            {632, sConfigMgr->GetFloatDefault("Solocraft.TheForgeOfSoulsH", 5.0) },
+            {649, sConfigMgr->GetFloatDefault("Solocraft.TrialOfTheCrusaderH", 25.0) },
+            {650, sConfigMgr->GetFloatDefault("Solocraft.TrialOfTheChampionH", 5.0) },
+            {658, sConfigMgr->GetFloatDefault("Solocraft.PitOfSaronH", 5.0) },
+            {668, sConfigMgr->GetFloatDefault("Solocraft.HallsOfReflectionH", 5.0) },
+            {724, sConfigMgr->GetFloatDefault("Solocraft.TheRubySanctumH", 25.0) },
+            /// CATACLYSM
+            {33, sConfigMgr->GetFloatDefault("Solocraft.ShadowfangKeepH", 5.0) },
+            {36, sConfigMgr->GetFloatDefault("Solocraft.DeadMinesH", 5.0) },
+            {645, sConfigMgr->GetFloatDefault("Solocraft.BlackrockCavernsH", 5.0) },
+            {643, sConfigMgr->GetFloatDefault("Solocraft.ThroneOfTheTidesH", 5.0) },
+            {657, sConfigMgr->GetFloatDefault("Solocraft.TheVortexPinnacleH", 5.0) },
+            {725, sConfigMgr->GetFloatDefault("Solocraft.TheStonecoreH", 5.0) },
+            {755, sConfigMgr->GetFloatDefault("Solocraft.LostCityOfTheTol'virH", 5.0) },
+            {644, sConfigMgr->GetFloatDefault("Solocraft.HallsOfOriginationH", 5.0) },
+            {670, sConfigMgr->GetFloatDefault("Solocraft.GrimBatolH", 5.0) },
+            {669, sConfigMgr->GetFloatDefault("Solocraft.BlackwingDescentH", 25.0) },
+            {671, sConfigMgr->GetFloatDefault("Solocraft.TheBastionOfTwilightH", 25.0) },
+            {754, sConfigMgr->GetFloatDefault("Solocraft.ThroneOfTheFourWindsH", 25.0) },
+            {757, sConfigMgr->GetFloatDefault("Solocraft.BaradinHoldH", 25.0) },
+            {720, sConfigMgr->GetFloatDefault("Solocraft.FirelandsH", 25.0) },
+            {967, sConfigMgr->GetFloatDefault("Solocraft.DragonSoulH", 25.0) },
+            {938, sConfigMgr->GetFloatDefault("Solocraft.EndTimeH", 5.0) },
+            {939, sConfigMgr->GetFloatDefault("Solocraft.WellOfEternityH", 5.0) },
+            {940, sConfigMgr->GetFloatDefault("Solocraft.HourOfTwilightH", 5.0) },
+            {859, sConfigMgr->GetFloatDefault("Solocraft.Zul'gurubH", 5.0) },
+            {568, sConfigMgr->GetFloatDefault("Solocraft.ZulAmanH", 5.0) },
+            {576, sConfigMgr->GetFloatDefault("Solocraft.NexusH", 5.0) },
+            /// MISTS OF PANDARIA
+            {959, sConfigMgr->GetFloatDefault("Solocraft.ShadoPanMonasteryH", 5.0) },
+            {1007, sConfigMgr->GetFloatDefault("Solocraft.ScholomanceH", 5.0) },
+            {1004, sConfigMgr->GetFloatDefault("Solocraft.ScarletMonasteryH", 5.0) },
+            {994, sConfigMgr->GetFloatDefault("Solocraft.Mogu'shanPalaceH", 5.0) },
+            {1008, sConfigMgr->GetFloatDefault("Solocraft.Mogu'shanVaultsH", 25.0) },
+            {1136, sConfigMgr->GetFloatDefault("Solocraft.SiegeOfOrgrimmarH", 25.0) },
+            {1098, sConfigMgr->GetFloatDefault("Solocraft.ThroneOfThunderH", 25.0) },
+            {1009, sConfigMgr->GetFloatDefault("Solocraft.HeartOfFearH", 25.0) },
+            {996, sConfigMgr->GetFloatDefault("Solocraft.TerraceOfEndlessSpringH", 25.0) },
+            {1001, sConfigMgr->GetFloatDefault("Solocraft.ScarletHallsH", 5.0) },
+            {962, sConfigMgr->GetFloatDefault("Solocraft.GateOfTheSettingSunH", 5.0) },
+            {1011, sConfigMgr->GetFloatDefault("Solocraft.SiegeOfNiuzaoTempleH", 5.0) },
+            {960, sConfigMgr->GetFloatDefault("Solocraft.TempleOfTheJadeSerpentH", 5.0) },
+            {961, sConfigMgr->GetFloatDefault("Solocraft.StormstoutBreweryH", 5.0) },
+        };
+
+        D649H10 = sConfigMgr->GetFloatDefault("Solocraft.ArgentTournamentRaidH10", 10.0);  // Trial of the Crusader 10 Heroic
+        D649H25 = sConfigMgr->GetFloatDefault("Solocraft.ArgentTournamentRaidH25", 25.0);  // Trial of the Crusader 25 Heroic
+
+    }
+
+
+public:
+    bool SoloCraftEnable = false;
+    bool SoloCraftAnnounceModule = true;
+    bool SoloCraftDebuffEnable = true;
+    bool SolocraftXPBalancingEnabled = true;
+    bool SolocraftXPEnabled = true;
+    bool SolocraftNoXPFlag = false;
+
+    float SoloCraftSpellMult = 1.0;
+    float SoloCraftStatsMult = 100.0;
+    float SoloCraftXPMod = 1.0;
+
+    uint32 SolocraftLevelDiff = 1;
+    uint32 SolocraftDungeonLevel = 1;
+
+    std::unordered_map<uint32, uint32> dungeons;
+    std::unordered_map<uint32, float> diff_Multiplier;
+    std::unordered_map<uint32, float> diff_Multiplier_Heroics;
+    std::unordered_map<uint8, uint32> classes;
+
+    float D5 = 1.0;
+    float D10 = 1.0;
+    float D25 = 1.0;
+    float D40 = 1.0;
+    float D649H10 = 1.0;
+    float D649H25 = 1.0;
+};
+
+class solocraft_system_announce : public PlayerScript
+{
+public:
+    solocraft_system_announce() : PlayerScript("solocraft_system_announce")
+    {
+        solocraftConfig = SolocraftConfig::getInstance();
+    }
+
+    void OnLogin(Player* player) override
+    {
+        if (solocraftConfig.SoloCraftEnable && solocraftConfig.SoloCraftAnnounceModule)
+        {
+            ChatHandler(player->GetSession()).SendSysMessage(SOLOCRAFT_TRINITYSTRING_ACTIVE);
+        } 
+    }
+
+    void OnLogout(Player* player) override
+    {
+        QueryResult result = CharacterDatabase.PQuery("SELECT `GUID` FROM `custom_solocraft_character_stats` WHERE GUID = %u", player->GetGUID());
+        if (result)
+        {
+            CharacterDatabase.PExecute("DELETE FROM custom_solocraft_character_stats WHERE GUID = %u", player->GetGUID());
+        }
+    }
+
+    void OnGiveXP(Player* /*player*/, uint32& amount, Unit* /*victim*/) override
+    {
+        if (solocraftConfig.SolocraftXPBalancingEnabled)
+        {
+            amount = uint32(amount * solocraftConfig.SoloCraftXPMod);
+        }
+    }
+
+protected:
+    SolocraftConfig solocraftConfig;
+};
+
+class solocraft_system_player_instance_handler : public PlayerScript
+{
+public:
+    solocraft_system_player_instance_handler() : PlayerScript("solocraft_system_player_instance_handler")
+    {
+        solocraftConfig = SolocraftConfig::getInstance();
+    }
 
     void OnMapChanged(Player* player) override
     {
-        if (!player) return;
-
-        Map* map = player->GetMap();
-        bool isGhost = player->HasAura(8326); // ghost aura id
-
-        uint64 guid = player->GetGUID();
-        auto it = statMap.find(guid);
-
-        // Only restore stats if leaving an instance and previously boosted
-        if ((!map || (!map->IsDungeon() && !map->IsRaid())) && it != statMap.end() && it->second.valid)
+        if (solocraftConfig.SoloCraftEnable)
         {
-            StatBackup& bk = it->second;
-
-            // Ensure engine accepts stat removals
-            bool oldCanModify = player->CanModifyStats();
-            if (!oldCanModify)
-                player->SetCanModifyStats(true);
-
-            // Remove any percent mods and direct flat deltas we applied while inside
-            removePercentMod(player, STAT_STAMINA, bk.lastPercentStamina);
-            removePercentMod(player, STAT_STRENGTH, bk.lastPercentStrength);
-            removePercentMod(player, STAT_AGILITY, bk.lastPercentAgility);
-            removePercentMod(player, STAT_SPIRIT, bk.lastPercentSpirit);
-            removePercentMod(player, STAT_INTELLECT, bk.lastPercentIntellect);
-
-            removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_STAMINA, bk.lastFlatStamina);
-            removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_STRENGTH, bk.lastFlatStrength);
-            removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_AGILITY, bk.lastFlatAgility);
-            removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_SPIRIT, bk.lastFlatSpirit);
-            removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_INTELLECT, bk.lastFlatIntellect);
-
-            // Remove spellpower delta if applied
-            if (bk.spApplied != 0)
-            {
-                player->ApplySpellPowerBonus(-bk.spApplied, true);
-                bk.spApplied = 0;
-            }
-
-            // Defensive clamp of saved base stats (never let engine base stat become negative)
-            auto clampNonNeg = [](int32 v) -> int32 { return v < 0 ? 0 : v; };
-
-            player->SetStat(STAT_STAMINA, clampNonNeg(bk.stamina));
-            player->SetStat(STAT_STRENGTH, clampNonNeg(bk.strength));
-            player->SetStat(STAT_AGILITY, clampNonNeg(bk.agility));
-            player->SetStat(STAT_SPIRIT, clampNonNeg(bk.spirit));
-            player->SetStat(STAT_INTELLECT, clampNonNeg(bk.intellect));
-
-            // Reinitialize core/class stats immediately so engine recalculates correctly
-            // Keep CanModifyStats true while we make changes
-            player->InitStatsForLevel(true); // reapply core/class modifiers
-
-            // Recompute derived stats immediately
-            player->UpdateAllStats();
-            player->UpdateMaxHealth();
-            player->UpdateAttackPowerAndDamage(false);
-            player->UpdateAllRatings();
-            player->UpdatePowerRegeneration();
-            player->UpdatePvpPower();
-
-            // Defensive: ensure visible stats are not negative after recalculation
-            if (int32(player->GetStat(STAT_STAMINA)) < 0) player->SetStat(STAT_STAMINA, 0);
-            if (int32(player->GetStat(STAT_STRENGTH)) < 0) player->SetStat(STAT_STRENGTH, 0);
-            if (int32(player->GetStat(STAT_AGILITY)) < 0) player->SetStat(STAT_AGILITY, 0);
-            if (int32(player->GetStat(STAT_SPIRIT)) < 0) player->SetStat(STAT_SPIRIT, 0);
-            if (int32(player->GetStat(STAT_INTELLECT)) < 0) player->SetStat(STAT_INTELLECT, 0);
-
-            // Clear stored deltas & mark as not boosted
-            bk.lastPercentStamina = bk.lastPercentStrength = bk.lastPercentAgility = bk.lastPercentSpirit = bk.lastPercentIntellect = 0.0f;
-            bk.lastFlatStamina = bk.lastFlatStrength = bk.lastFlatAgility = bk.lastFlatSpirit = bk.lastFlatIntellect = 0.0f;
-            bk.lastAuraCount = 0;
-            bk.valid = false;
-            bk.lastWasAlive = (player->GetHealth() > 0 && !isGhost);
-
-            // restore CanModifyStats
-            if (!oldCanModify)
-                player->SetCanModifyStats(false);
-
-            // Final refresh (do not force revive)
-            player->UpdateAllStats();
-            player->UpdateMaxHealth();
-            player->UpdateAttackPowerAndDamage(false);
-            player->UpdateAllRatings();
-            player->UpdatePowerRegeneration();
-            player->UpdatePvpPower();
-
-            TC_LOG_INFO("module.balance", "Restored stats and cleared boost for playerGuidLow=%u", player->GetGUIDLow());
-        }
-
-        // Ensure boost state consistent after map change
-        EnsureBoost(player);
-    }
-
-    void OnUpdate(Player* player, uint32 /*diff*/) override
-    {
-        if (!player) return;
-
-        Map* map = player->GetMap();
-        // Only process boost logic if in a dungeon or raid
-        if (!map || (!map->IsDungeon() && !map->IsRaid()))
-            return;
-
-        uint64 guid = player->GetGUID();
-        StatBackup& bk = statMap[guid]; // will create default if not present
-
-        uint32 auraCount = uint32(player->GetAppliedAuras().size());
-        bool isAliveNow = (player->GetHealth() > 0 && !player->HasAura(8326));
-
-        if (bk.valid)
-        {
-            // aura change -> re-evaluate
-            if (auraCount != bk.lastAuraCount)
-            {
-                bk.lastAuraCount = auraCount;
-                EnsureBoost(player);
-            }
-
-            // revive detected: lastWasAlive==false -> true
-            if (!bk.lastWasAlive && isAliveNow)
-            {
-                // Reinitialize core stats so engine has correct base values
-                player->InitStatsForLevel(true); // reapply core modifiers and recalc base stats
-
-                // Recompute derived stats
-                player->UpdateAllStats();
-                player->UpdateMaxHealth();
-                player->UpdateAttackPowerAndDamage(false);
-                player->UpdateAllRatings();
-                player->UpdatePowerRegeneration();
-                player->UpdatePvpPower();
-
-                // Reapply instance boost now player is alive
-                EnsureBoost(player);
-
-                TC_LOG_INFO("module.balance", "Player %u revived in-instance: reinit stats and reapplied boosts", player->GetGUIDLow());
-            }
-
-            bk.lastAuraCount = auraCount;
-            bk.lastWasAlive = isAliveNow;
-        }
-        else
-        {
-            // store snapshot for future comparisons
-            bk.lastAuraCount = auraCount;
-            bk.lastWasAlive = isAliveNow;
-        }
-    }
-
-    static void EnsureBoost(Player* player)
-    {
-        if (!player) return;
-
-        Map* map = player->GetMap();
-        uint64 guid = player->GetGUID();
-
-        bool inInstance = map && (map->IsDungeon() || map->IsRaid());
-        StatBackup& bk = statMap[guid];
-
-        // Only apply/remove boost logic if inside an instance
-        if (inInstance)
-        {
-            // If we don't have a stored base, capture it now (entering instance).
-            // Use Create stats to avoid saving transient spell-buffed values.
-            if (!bk.valid)
-            {
-                bk.ap = player->GetTotalAttackPowerValue(BASE_ATTACK);
-                bk.spellPower = player->GetBaseSpellPowerBonus();
-                // Use GetCreateStat to capture base stats (avoid capturing active spell auras)
-                bk.stamina = static_cast<int32>(player->GetCreateStat(STAT_STAMINA));
-                bk.strength = static_cast<int32>(player->GetCreateStat(STAT_STRENGTH));
-                bk.agility = static_cast<int32>(player->GetCreateStat(STAT_AGILITY));
-                bk.spirit = static_cast<int32>(player->GetCreateStat(STAT_SPIRIT));
-                bk.intellect = static_cast<int32>(player->GetCreateStat(STAT_INTELLECT));
-
-                bk.lastPercentStamina = bk.lastPercentStrength = bk.lastPercentAgility = bk.lastPercentSpirit = bk.lastPercentIntellect = 0.0f;
-                bk.lastFlatStamina = bk.lastFlatStrength = bk.lastFlatAgility = bk.lastFlatSpirit = bk.lastFlatIntellect = 0.0f;
-                bk.spApplied = 0;
-                bk.lastAuraCount = uint32(player->GetAppliedAuras().size());
-                bk.lastWasAlive = (player->GetHealth() > 0 && !player->HasAura(8326));
-
-                bk.valid = true;
-
-                TC_LOG_INFO("module.balance", "Saved base stats for playerGuidLow=%u STAM=%d STR=%d AGI=%d SPI=%d INT=%d SP=%u",
-                    player->GetGUIDLow(), bk.stamina, bk.strength, bk.agility, bk.spirit, bk.intellect, bk.spellPower);
-            }
-
-            // If player is dead/ghost, skip applying modifiers now.
-            // We keep bk.valid so we can reapply on revive (OnUpdate detects revive).
-            if (player->GetHealth() == 0 || player->HasAura(8326))
-            {
-                // update lastWasAlive so OnUpdate can detect the revive transition
-                bk.lastWasAlive = false;
-                return;
-            }
-
-            // At this point player is alive and inside an instance -> ensure modifiers are applied once.
-            // Save and set CanModifyStats for engine acceptance
-            bool oldCanModify = player->CanModifyStats();
-            if (!oldCanModify)
-                player->SetCanModifyStats(true);
-
-            // Remove previous engine-percent/fallback deltas (defensive)
-            removePercentMod(player, STAT_STAMINA, bk.lastPercentStamina);
-            removePercentMod(player, STAT_STRENGTH, bk.lastPercentStrength);
-            removePercentMod(player, STAT_AGILITY, bk.lastPercentAgility);
-            removePercentMod(player, STAT_SPIRIT, bk.lastPercentSpirit);
-            removePercentMod(player, STAT_INTELLECT, bk.lastPercentIntellect);
-
-            removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_STAMINA, bk.lastFlatStamina);
-            removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_STRENGTH, bk.lastFlatStrength);
-            removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_AGILITY, bk.lastFlatAgility);
-            removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_SPIRIT, bk.lastFlatSpirit);
-            removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_INTELLECT, bk.lastFlatIntellect);
-
-            // Calculate multiplier with diminishing returns for missing players
-            Group* group = player->GetGroup();
-            uint32 groupSize = group ? group->GetMembersCount() : 1;
-
-            uint32 maxGroupCap = 5;
-            if (map->IsRaid())
-            {
-                Difficulty diff = map->GetDifficulty();
-                switch (diff)
-                {
-                case RAID_DIFFICULTY_10MAN_NORMAL:
-                case RAID_DIFFICULTY_10MAN_HEROIC: maxGroupCap = 10; break;
-                case RAID_DIFFICULTY_25MAN_NORMAL:
-                case RAID_DIFFICULTY_25MAN_HEROIC:
-                case RAID_DIFFICULTY_25MAN_LFR:
-                case RAID_DIFFICULTY_1025MAN_FLEX: maxGroupCap = 25; break;
-                case RAID_DIFFICULTY_40MAN: maxGroupCap = 40; break;
-                default: maxGroupCap = MAXRAIDSIZE; break;
-                }
-            }
-
-            if (groupSize > maxGroupCap) groupSize = maxGroupCap;
-            uint32 missing = (groupSize < maxGroupCap) ? (maxGroupCap - groupSize) : 0;
-
-            // Diminishing returns: effectiveMissing = missing^diminishingExp
-            float effectiveMissing = (missing == 0) ? 0.0f : std::pow(static_cast<float>(missing), diminishingExp);
-            float rawBoost = effectiveMissing * boostPerMissing;
-            float ratio = std::min(rawBoost, maxTotalBoost);
-            float multiplier = 1.0f + ratio;
-
-            // Apply percent mods (engine path + fallback)
-            applyPercentMod(player, STAT_STAMINA, ratio);
-            applyPercentMod(player, STAT_STRENGTH, ratio);
-            applyPercentMod(player, STAT_AGILITY, ratio);
-            applyPercentMod(player, STAT_SPIRIT, ratio);
-            applyPercentMod(player, STAT_INTELLECT, ratio);
-
-            float percentPoints = ratio * 100.0f;
-            bk.lastPercentStamina = percentPoints;
-            bk.lastPercentStrength = percentPoints;
-            bk.lastPercentAgility = percentPoints;
-            bk.lastPercentSpirit = percentPoints;
-            bk.lastPercentIntellect = percentPoints;
-
-            // Spell power
-            uint32 baseSP = bk.spellPower;
-            uint32 newSP = static_cast<uint32>(static_cast<float>(baseSP) * multiplier);
-            int32 newSpDelta = static_cast<int32>(newSP) - static_cast<int32>(baseSP);
-
-            if (bk.spApplied != 0)
-                player->ApplySpellPowerBonus(-bk.spApplied, true);
-
-            if (newSpDelta != 0)
-            {
-                player->ApplySpellPowerBonus(newSpDelta, true);
-                TC_LOG_INFO("module.balance", "Applied spellpower delta %+d for playerGuidLow=%u", newSpDelta, player->GetGUIDLow());
-            }
-
-            bk.spApplied = newSpDelta;
-
-            // Recalculate derived stats and write visible flat deltas
-            player->UpdateAllStats();
-
-            {
-                float totalStam = player->GetTotalStatValue(STAT_STAMINA);
-                float visibleStam = float(player->GetStat(STAT_STAMINA));
-                float deltaStam = totalStam - visibleStam;
-
-                float totalStr = player->GetTotalStatValue(STAT_STRENGTH);
-                float visibleStr = float(player->GetStat(STAT_STRENGTH));
-                float deltaStr = totalStr - visibleStr;
-
-                float totalAgi = player->GetTotalStatValue(STAT_AGILITY);
-                float visibleAgi = float(player->GetStat(STAT_AGILITY));
-                float deltaAgi = totalAgi - visibleAgi;
-
-                float totalSpi = player->GetTotalStatValue(STAT_SPIRIT);
-                float visibleSpi = float(player->GetStat(STAT_SPIRIT));
-                float deltaSpi = totalSpi - visibleSpi;
-
-                float totalInt = player->GetTotalStatValue(STAT_INTELLECT);
-                float visibleInt = float(player->GetStat(STAT_INTELLECT));
-                float deltaInt = totalInt - visibleInt;
-
-                applyDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_STAMINA, deltaStam);
-                applyDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_STRENGTH, deltaStr);
-                applyDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_AGILITY, deltaAgi);
-                applyDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_SPIRIT, deltaSpi);
-                applyDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_INTELLECT, deltaInt);
-
-                bk.lastFlatStamina = deltaStam;
-                bk.lastFlatStrength = deltaStr;
-                bk.lastFlatAgility = deltaAgi;
-                bk.lastFlatSpirit = deltaSpi;
-                bk.lastFlatIntellect = deltaInt;
-            }
-
-            // Recalculate other derived stats
-            player->UpdateMaxHealth();
-            player->UpdateAttackPowerAndDamage(false);
-            player->UpdateAllRatings();
-            player->UpdatePowerRegeneration();
-            player->UpdatePvpPower();
-
-            // restore CanModifyStats to original state
-            if (!oldCanModify)
-                player->SetCanModifyStats(false);
-
-            TC_LOG_INFO("module.balance", "Applied stat boosts for playerGuidLow=%u (ratio=%.2f%%)", player->GetGUIDLow(), percentPoints);
-
-            bk.lastAuraCount = uint32(player->GetAppliedAuras().size());
-            bk.lastWasAlive = true;
-        }
-        else
-        {
-            // Not in instance: remove previously applied mods if present (existing logic)
-            if (!bk.valid)
-                return;
-
-            TC_LOG_INFO("module.balance", "Removing applied boosts for playerGuidLow=%u", player->GetGUIDLow());
-
-            bool oldCanModify = player->CanModifyStats();
-            if (!oldCanModify)
-                player->SetCanModifyStats(true);
-
-            removePercentMod(player, STAT_STAMINA, bk.lastPercentStamina);
-            removePercentMod(player, STAT_STRENGTH, bk.lastPercentStrength);
-            removePercentMod(player, STAT_AGILITY, bk.lastPercentAgility);
-            removePercentMod(player, STAT_SPIRIT, bk.lastPercentSpirit);
-            removePercentMod(player, STAT_INTELLECT, bk.lastPercentIntellect);
-
-            removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_STAMINA, bk.lastFlatStamina);
-            removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_STRENGTH, bk.lastFlatStrength);
-            removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_AGILITY, bk.lastFlatAgility);
-            removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_SPIRIT, bk.lastFlatSpirit);
-            removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_INTELLECT, bk.lastFlatIntellect);
-
-            if (bk.spApplied != 0)
-            {
-                player->ApplySpellPowerBonus(-bk.spApplied, true);
-                TC_LOG_INFO("module.balance", "Removed spellpower delta -%d for playerGuidLow=%u", bk.spApplied, player->GetGUIDLow());
-                bk.spApplied = 0;
-            }
-
-            bk.lastPercentStamina = bk.lastPercentStrength = bk.lastPercentAgility = bk.lastPercentSpirit = bk.lastPercentIntellect = 0.0f;
-            bk.lastFlatStamina = bk.lastFlatStrength = bk.lastFlatAgility = bk.lastFlatSpirit = bk.lastFlatIntellect = 0.0f;
-            bk.lastAuraCount = 0;
-            bk.lastWasAlive = (player->GetHealth() > 0 && !player->HasAura(8326));
-
-            // restore CanModifyStats
-            if (!oldCanModify)
-                player->SetCanModifyStats(false);
-
-            player->UpdateAllStats();
-            player->UpdateMaxHealth();
-            player->SetHealth(player->GetMaxHealth());
-            player->UpdateAttackPowerAndDamage(false);
-            player->UpdateAllRatings();
-            player->UpdatePowerRegeneration();
-            player->UpdatePvpPower();
-
-            bk.valid = false;
-            TC_LOG_INFO("module.balance", "Removed applied mods for playerGuidLow=%u", player->GetGUIDLow());
+            Map* map = player->GetMap();
+            float difficulty = CalculateDifficulty(map, player);
+            int dunLevel = CalculateDungeonLevel(map, player);
+            int numInGroup = GetNumInGroup(player);
+            uint32 classBalance = GetClassBalance(player);
+         
+            ApplyBuffs(player, map, difficulty, dunLevel, numInGroup, classBalance);
         }
     }
 
 private:
-    static void removePercentMod(Player* player, Stats stat, float prevPercent)
+    std::map<uint32, float> _unitDifficulty;
+protected:
+    SolocraftConfig solocraftConfig;
+    bool noXPGainFlag = false; // if noXPGainFlag before solocraft setting
+
+    float CalculateDifficulty(Map* map, Player* /*player*/)
     {
-        if (prevPercent == 0.0f) return;
-
-        // Remove via public API (stack-aware)
-        player->ApplyStatPercentBuffMod(stat, prevPercent, false);
-
-        // Defensive: subtract our percent from engine internal slot instead of zeroing it.
-        UnitMods fallbackMod = UNIT_MOD_STAT_STRENGTH;
-        switch (stat)
+        if (map)
         {
-        case STAT_STRENGTH:  fallbackMod = UNIT_MOD_STAT_STRENGTH; break;
-        case STAT_AGILITY:   fallbackMod = UNIT_MOD_STAT_AGILITY;  break;
-        case STAT_STAMINA:   fallbackMod = UNIT_MOD_STAT_STAMINA;  break;
-        case STAT_INTELLECT: fallbackMod = UNIT_MOD_STAT_INTELLECT; break;
-        case STAT_SPIRIT:    fallbackMod = UNIT_MOD_STAT_SPIRIT;   break;
-        default: fallbackMod = UNIT_MOD_STAT_STRENGTH; break;
+            if (map->Is25ManRaid())
+            {
+                if (map->IsHeroic() && map->GetId() == 649)
+                {
+                    return solocraftConfig.D649H25;
+                }
+                else if (solocraftConfig.diff_Multiplier_Heroics.find(map->GetId()) == solocraftConfig.diff_Multiplier_Heroics.end())
+                {
+                    return solocraftConfig.D25;
+                }
+                else
+                    return solocraftConfig.diff_Multiplier_Heroics[map->GetId()];
+            }
+
+            if (map->IsHeroic())
+            {
+                if (map->GetId() == 649)
+                {
+                    return solocraftConfig.D649H10;
+                }
+                else if (solocraftConfig.diff_Multiplier_Heroics.find(map->GetId()) == solocraftConfig.diff_Multiplier_Heroics.end())
+                {
+                    return solocraftConfig.D10;
+                }
+                else
+                    return solocraftConfig.diff_Multiplier_Heroics[map->GetId()];
+            }
+
+            if (solocraftConfig.diff_Multiplier.find(map->GetId()) == solocraftConfig.diff_Multiplier.end())
+            {
+                if (map->IsDungeon())
+                {
+                    return solocraftConfig.D5;
+                }
+                else if (map->IsRaid())
+                {
+                    return solocraftConfig.D40;
+                }
+            }
+            else
+                return solocraftConfig.diff_Multiplier[map->GetId()];
+        }
+        return 0;
+    }
+
+    int CalculateDungeonLevel(Map* map, Player* /*player*/)
+    {
+        if (solocraftConfig.dungeons.find(map->GetId()) == solocraftConfig.dungeons.end())
+        {
+            return solocraftConfig.SolocraftDungeonLevel;
+        }
+        else
+            return solocraftConfig.dungeons[map->GetId()];
+    }
+
+    int GetNumInGroup(Player* player)
+    {
+        int numInGroup = 1;
+        Group* group = player->GetGroup();
+
+        if (group)
+        {
+            Group::MemberSlotList const& groupMembers = group->GetMemberSlots();
+            numInGroup = groupMembers.size();
+        }
+        return numInGroup;
+    }
+
+    uint32 GetClassBalance(Player* player)
+    {
+        uint32 classBalance = 100;
+
+        if (solocraftConfig.classes.find(player->getClass()) == solocraftConfig.classes.end())
+        {
+            return classBalance;
+        }
+        else if (solocraftConfig.classes[player->getClass()] <= 100)
+        {
+            return solocraftConfig.classes[player->getClass()];
+        }
+        else
+            return classBalance;
+    }
+
+    void ApplyBuffs(Player* player, Map* map, float difficulty, int dunLevel, int numInGroup, int classBalance)
+    {
+        if (difficulty > 0)
+        {
+
+            int SpellPowerBonus = 0;
+
+            if (player->HasFlag(PLAYER_FIELD_PLAYER_FLAGS, PLAYER_FLAGS_NO_XP_GAIN))
+            {
+                noXPGainFlag = true;
+            }
+
+            if (player->getLevel() <= dunLevel + solocraftConfig.SolocraftLevelDiff)
+            {
+                float GroupDifficulty = GetGroupDifficulty(player);
+
+                if (GroupDifficulty >= difficulty && solocraftConfig.SoloCraftDebuffEnable)
+                {
+                    difficulty = (-abs(difficulty)) + ((((float)classBalance / 100) * difficulty) / numInGroup);
+                    difficulty = roundf(difficulty * 100) / 100;
+
+                    if (!player->HasFlag(PLAYER_FIELD_PLAYER_FLAGS, PLAYER_FLAGS_NO_XP_GAIN) && solocraftConfig.SolocraftXPBalancingEnabled)
+                    {
+                        player->SetFlag(PLAYER_FIELD_PLAYER_FLAGS, PLAYER_FLAGS_NO_XP_GAIN);
+                    }
+                }
+
+                QueryResult result = CharacterDatabase.PQuery(
+                    "SELECT `guid`, `Difficulty`, `GroupSize`, `SpellPower`, `Stats` FROM `custom_solocraft_character_stats` WHERE `guid` = %u",
+                    player->GetGUID()
+                );
+
+                for (int32 i = STAT_STRENGTH; i < MAX_STATS; ++i)
+                {
+                    if (result)
+                    {
+                        player->HandleStatModifier(UnitMods(UNIT_MOD_STAT_START + i), TOTAL_VALUE, (*result)[1].GetFloat() * (*result)[4].GetFloat(), false);
+                    }
+
+                    // Example: Apply a minimum stat bonus for low-level players in ApplyBuffs
+
+                    float maxLevel = 90.0f; // Set to your server's max level
+                    float exponent = 4.0f;  // Use quadratic or tune as needed
+                    float minScale = 0.05f; // Minimum scale (10% of full bonus)
+                    float levelScale = pow(static_cast<float>(player->getLevel()) / maxLevel, exponent);
+
+                    // Ensure levelScale is never below minScale
+                    levelScale = std::max(levelScale, minScale);
+
+                    float statBonus = difficulty * solocraftConfig.SoloCraftStatsMult * levelScale;
+                    player->HandleStatModifier(UnitMods(UNIT_MOD_STAT_START + i), TOTAL_VALUE, statBonus, true);
+                }
+
+                player->SetFullHealth();
+                player->CastSpell(player, 6962, true);
+
+                if (player->GetPowerType() == POWER_MANA || player->getClass() == 11)
+                {
+                    player->SetPower(POWER_MANA, player->GetMaxPower(POWER_MANA));
+
+                    if (result)
+                    {
+                        player->ApplySpellPowerBonus((*result)[3].GetUInt32() * (*result)[4].GetFloat(), false);
+                    }
+
+                    if (difficulty > 0)
+                    {
+                        SpellPowerBonus = static_cast<int>((player->getLevel() * solocraftConfig.SoloCraftSpellMult) * difficulty);
+                        player->ApplySpellPowerBonus(SpellPowerBonus, true);
+                    }
+                }
+
+                if (!solocraftConfig.SolocraftXPEnabled)
+                {
+                    if (!player->HasFlag(PLAYER_FIELD_PLAYER_FLAGS, PLAYER_FLAGS_NO_XP_GAIN))
+                    {
+                        player->SetFlag(PLAYER_FIELD_PLAYER_FLAGS, PLAYER_FLAGS_NO_XP_GAIN);
+                    }
+                }
+
+                if (difficulty > 0)
+                {
+
+                    const char* solocraft_enabled = player->GetSession()->GetTrinityString(SOLOCRAFT_TRINITYSTRING_ENABLED);
+                    const char* solocraft_disabled = player->GetSession()->GetTrinityString(SOLOCRAFT_TRINITYSTRING_DISABLED);
+                    ChatHandler(player->GetSession()).PSendSysMessage(player->GetSession()->GetTrinityString(SOLOCRAFT_TRINITYSTRING_STATUS), player->GetName().c_str(), map->GetMapName(), difficulty, SpellPowerBonus, classBalance, solocraftConfig.SolocraftXPEnabled ? solocraft_enabled : solocraft_disabled, solocraftConfig.SolocraftXPBalancingEnabled ? solocraft_enabled : solocraft_disabled);
+                    //|cffFF0000[SoloCraft]|r |cffFF8000 %s entered %s - Difficulty Offset: %0.2f. Spellpower Bonus: %i. Class Balance Weight: %i. XP Gain: |cffFF0000%s XP Balancing:%s |cff4CFF00%s
+
+                }
+                else
+                {
+                    ChatHandler(player->GetSession()).PSendSysMessage(player->GetSession()->GetTrinityString(SOLOCRAFT_TRINITYSTRING_ERR_GROUP_ALREADY_BUFFED), player->GetName().c_str(), map->GetMapName(), difficulty, classBalance);
+                    // |cffFF0000[SoloCraft]|r |cffFF8000 %s entered %s - |cffFF0000BE ADVISED - You have been debuffed by offset: %0.2f with a Class Balance Weight: %i. |cffFF8000A group member already inside has the dungeon's full buff offset. No Spellpower buff will be applied to spell casters. ALL group members must exit the dungeon and re-enter to receive a balanced offset.
+                }
+
+                CharacterDatabase.PExecute(
+                    "REPLACE INTO `custom_solocraft_character_stats` (`guid`, `Difficulty`, `GroupSize`, `SpellPower`, `Stats`) VALUES (%lu, %f, %u, %i, %f)",
+                    player->GetGUID(), difficulty, numInGroup, SpellPowerBonus, solocraftConfig.SoloCraftStatsMult
+                );
+            }
+            else
+            {
+                ChatHandler(player->GetSession()).PSendSysMessage(player->GetSession()->GetTrinityString(SOLOCRAFT_TRINITYSTRING_ERR_LEVEL_TOO_HIGH), player->GetName().c_str(), map->GetMapName(), dunLevel + solocraftConfig.SolocraftLevelDiff);
+                ClearBuffs(player, map);
+            }
+        }
+        else
+        {
+            ClearBuffs(player, map);
+        }
+    }
+
+    float GetGroupDifficulty(Player* player)
+    {
+        float GroupDifficulty = 0.0;
+        Group* group = player->GetGroup();
+
+        if (group)
+        {
+            Group::MemberSlotList const& groupMembers = group->GetMemberSlots();
+
+            for (Group::member_citerator itr = groupMembers.begin(); itr != groupMembers.end(); ++itr)
+            {
+                if (itr->guid != player->GetGUID())
+                {
+                    QueryResult result = CharacterDatabase.PQuery("SELECT `guid`, `Difficulty`, `GroupSize` FROM `custom_solocraft_character_stats` WHERE `guid` = %lu", itr->guid);
+
+                    if (result)
+                    {
+                        if ((*result)[1].GetFloat() > 0)
+                        {
+                            GroupDifficulty = GroupDifficulty + (*result)[1].GetFloat();
+                        }
+                    }
+                }
+            }
         }
 
-        float current = player->GetModifierValue(fallbackMod, TOTAL_PCT);
-        float newVal = current - prevPercent;
-        if (newVal < 0.0f)
-            newVal = 0.0f; // never negative
-        player->SetModifierValue(fallbackMod, TOTAL_PCT, newVal);
+        return GroupDifficulty;
     }
 
-    static void applyPercentMod(Player* player, Stats stat, float ratio)
+    void ClearBuffs(Player* player, Map* map)
     {
-        if (ratio == 0.0f) return;
+        QueryResult result = CharacterDatabase.PQuery("SELECT `guid`, `Difficulty`, `GroupSize`, `SpellPower`, `Stats` FROM `custom_solocraft_character_stats` WHERE `guid` = %lu", player->GetGUID() );
 
-        float percentPoints = ratio * 100.0f;
-        // Call public API (stack-aware)
-        player->ApplyStatPercentBuffMod(stat, percentPoints, true);
-
-        // Add our percent to engine internal slot rather than overwrite it.
-        UnitMods fallbackMod = UNIT_MOD_STAT_STRENGTH;
-        switch (stat)
+        if (result)
         {
-        case STAT_STRENGTH:  fallbackMod = UNIT_MOD_STAT_STRENGTH; break;
-        case STAT_AGILITY:   fallbackMod = UNIT_MOD_STAT_AGILITY;  break;
-        case STAT_STAMINA:   fallbackMod = UNIT_MOD_STAT_STAMINA;  break;
-      
-        case STAT_INTELLECT: fallbackMod = UNIT_MOD_STAT_INTELLECT; break;
-        case STAT_SPIRIT:    fallbackMod = UNIT_MOD_STAT_SPIRIT;   break;
-        default: fallbackMod = UNIT_MOD_STAT_STRENGTH; break;
+            float difficulty = (*result)[1].GetFloat();
+            int SpellPowerBonus = (*result)[3].GetUInt32();
+            float StatsMultPct = (*result)[4].GetFloat();
+
+            ChatHandler(player->GetSession()).PSendSysMessage(player->GetSession()->GetTrinityString(SOLOCRAFT_TRINITYSTRING_CLEAR_BUFFS), player->GetName().c_str(), map->GetMapName(), difficulty, SpellPowerBonus);
+
+            for (int32 i = STAT_STRENGTH; i < MAX_STATS; ++i)
+            {
+                player->HandleStatModifier(UnitMods(UNIT_MOD_STAT_START + i), TOTAL_VALUE, difficulty * StatsMultPct, false);
+            }
+
+            if (player->GetPowerType() == POWER_MANA && difficulty > 0)
+            {
+                player->ApplySpellPowerBonus(SpellPowerBonus, false);
+            }
+
+            if (player->HasFlag(PLAYER_FIELD_PLAYER_FLAGS, PLAYER_FLAGS_NO_XP_GAIN) && !noXPGainFlag && !solocraftConfig.SolocraftNoXPFlag)
+            {
+                player->RemoveFlag(PLAYER_FIELD_PLAYER_FLAGS, PLAYER_FLAGS_NO_XP_GAIN);
+            }
+
+            CharacterDatabase.PExecute(
+                "DELETE FROM `custom_solocraft_character_stats` WHERE `guid` = %lu",
+                player->GetGUID()
+            );
         }
-
-        float current = player->GetModifierValue(fallbackMod, TOTAL_PCT);
-        float newVal = current + percentPoints;
-        player->SetModifierValue(fallbackMod, TOTAL_PCT, newVal);
-    }
-    static void removeDirectFlat(Player* player, int16 fieldIndex, float prev)
-    {
-        if (prev != 0.0f)
-            player->ApplyModPositiveFloatValue(fieldIndex, prev, false);
-    }
-
-    static void applyDirectFlat(Player* player, int16 fieldIndex, float val)
-    {
-        if (val != 0.0f)
-            player->ApplyModPositiveFloatValue(fieldIndex, val, true);
     }
 };
 
-// static member definitions
-std::unordered_map<uint64, StatBackup> mod_balance::statMap;
-float mod_balance::boostPerMissing = 0.03f;
-float mod_balance::maxTotalBoost = 0.50f;
-float mod_balance::diminishingExp = 0.5f;
-
-/*
- * Spell/Aura hook: attach this AuraScript to the specific buff spell(s) you care about.
- * To bind this script to a spell, add a spell_script_map entry in your DB that maps
- * the spell id(s) to this script name ("spell_balance_hook"), or use existing tooling
- * that assigns script loaders to spell ids.
- *
- * The AuraScript calls `balance_dungeon_boost::EnsureBoost(Player*)` on apply/remove.
- */
-class spell_balance_hook : public SpellScriptLoader
+void AddSC_solocraft_system()
 {
-public:
-    spell_balance_hook() : SpellScriptLoader("spell_balance_hook") {}
-
-    class spell_balance_hook_AuraScript : public AuraScript
-    {
-        PrepareAuraScript(spell_balance_hook_AuraScript);
-
-        void OnApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
-        {
-            if (Unit* target = GetTarget())
-                if (Player* player = target->ToPlayer())
-                    mod_balance::EnsureBoost(player);
-        }
-
-        void OnRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
-        {
-            if (Unit* target = GetTarget())
-                if (Player* player = target->ToPlayer())
-                    mod_balance::EnsureBoost(player);
-        }
-
-        void Register() override
-        {
-            // Use EFFECT_ALL to avoid multiple registrations and ensure we catch any effect index.
-            OnEffectApply += AuraEffectApplyFn(spell_balance_hook_AuraScript::OnApply, EFFECT_ALL, SPELL_AURA_ANY, AURA_EFFECT_HANDLE_REAL);
-            OnEffectRemove += AuraEffectRemoveFn(spell_balance_hook_AuraScript::OnRemove, EFFECT_ALL, SPELL_AURA_ANY, AURA_EFFECT_HANDLE_REAL);
-        }
-    };
-
-    AuraScript* GetAuraScript() const override
-    {
-        return new spell_balance_hook_AuraScript();
-    }
-};
-
-void AddSC_mod_balance()
-{
-    TC_LOG_INFO("module.balance", "AddSC_balance_dungeon_boost called");
-    new mod_balance();
-
-    // Register the aura hook loader � bind to spell ids in DB as needed.
-    new spell_balance_hook();
+    new solocraft_system_announce();
+    new solocraft_system_player_instance_handler();
 }
