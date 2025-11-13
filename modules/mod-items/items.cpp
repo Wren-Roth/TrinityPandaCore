@@ -2,10 +2,10 @@
 #include "Player.h"
 #include "Chat.h"
 
-class items_gearup : public PlayerScript
+class mod_items : public PlayerScript
 {
 public:
-    items_gearup() : PlayerScript("items_gearup") {}
+    mod_items() : PlayerScript("items_gearup") {}
 
     void OnChat(Player* player, uint32 type, uint32 lang, std::string& msg) override
     {
@@ -160,7 +160,7 @@ public:
     }
 };
 
-void AddSC_items_gearup()
+void AddSC_mod_items()
 {
-    new items_gearup();
+    new mod_items();
 }
