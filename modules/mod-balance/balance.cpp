@@ -20,58 +20,74 @@ struct StatBackup
     int32 spirit = 0;
     int32 intellect = 0;
 
+    // Applied percent mods (so we can remove them precisely)
     float lastPercentStamina = 0.0f;
     float lastPercentStrength = 0.0f;
     float lastPercentAgility = 0.0f;
     float lastPercentSpirit = 0.0f;
     float lastPercentIntellect = 0.0f;
 
+    // Fallback: applied positive float unit-field deltas (client-visible)
     float lastFlatStamina = 0.0f;
     float lastFlatStrength = 0.0f;
     float lastFlatAgility = 0.0f;
     float lastFlatSpirit = 0.0f;
     float lastFlatIntellect = 0.0f;
 
+    // Applied spellpower delta (signed)
     int32 spApplied = 0;
 
+    // Track number of auras applied last time we checked (used to detect aura changes)
     uint32 lastAuraCount = 0;
+
+    // Track last known alive state (so we can detect revive events)
     bool lastWasAlive = true;
+
     bool valid = false;
 };
 
 class mod_balance : public PlayerScript
 {
 public:
-    mod_balance() : PlayerScript("mod_balance")
+    mod_balance() : PlayerScript("balance_dungeon_boost")
     {
-        TC_LOG_INFO("module.balance", "mod_balance ctor called");
+        TC_LOG_INFO("module.balance", "balance_dungeon_boost ctor called");
         boostPerMissing = sConfigMgr->GetFloatDefault("DungeonBoost.PerMissing", 0.03f);
-        maxTotalBoost = sConfigMgr->GetFloatDefault("DungeonBoost.MaxTotal", 0.50f);
-        diminishingExp = sConfigMgr->GetFloatDefault("DungeonBoost.DiminishingExp", 0.5f);
+
+        // New tunables
+        maxTotalBoost = sConfigMgr->GetFloatDefault("DungeonBoost.MaxTotal", 0.50f);        // e.g. 50% cap
+        diminishingExp = sConfigMgr->GetFloatDefault("DungeonBoost.DiminishingExp", 0.5f); // e.g. sqrt scaling
     }
 
     static std::unordered_map<uint64, StatBackup> statMap;
     static float boostPerMissing;
+
+    // New config tunables to limit/shape boost
     static float maxTotalBoost;
     static float diminishingExp;
+
 
     void OnMapChanged(Player* player) override
     {
         if (!player) return;
 
         Map* map = player->GetMap();
-        bool isGhost = player->HasAura(8326);
+        bool isGhost = player->HasAura(8326); // ghost aura id
 
         uint64 guid = player->GetGUID();
         auto it = statMap.find(guid);
 
+        // Only restore stats if leaving an instance and previously boosted
         if ((!map || (!map->IsDungeon() && !map->IsRaid())) && it != statMap.end() && it->second.valid)
         {
             StatBackup& bk = it->second;
+
+            // Ensure engine accepts stat removals
             bool oldCanModify = player->CanModifyStats();
             if (!oldCanModify)
                 player->SetCanModifyStats(true);
 
+            // Remove any percent mods and direct flat deltas we applied while inside
             removePercentMod(player, STAT_STAMINA, bk.lastPercentStamina);
             removePercentMod(player, STAT_STRENGTH, bk.lastPercentStrength);
             removePercentMod(player, STAT_AGILITY, bk.lastPercentAgility);
@@ -84,12 +100,14 @@ public:
             removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_SPIRIT, bk.lastFlatSpirit);
             removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_INTELLECT, bk.lastFlatIntellect);
 
+            // Remove spellpower delta if applied
             if (bk.spApplied != 0)
             {
                 player->ApplySpellPowerBonus(-bk.spApplied, true);
                 bk.spApplied = 0;
             }
 
+            // Defensive clamp of saved base stats (never let engine base stat become negative)
             auto clampNonNeg = [](int32 v) -> int32 { return v < 0 ? 0 : v; };
 
             player->SetStat(STAT_STAMINA, clampNonNeg(bk.stamina));
@@ -98,8 +116,11 @@ public:
             player->SetStat(STAT_SPIRIT, clampNonNeg(bk.spirit));
             player->SetStat(STAT_INTELLECT, clampNonNeg(bk.intellect));
 
-            player->InitStatsForLevel(true);
+            // Reinitialize core/class stats immediately so engine recalculates correctly
+            // Keep CanModifyStats true while we make changes
+            player->InitStatsForLevel(true); // reapply core/class modifiers
 
+            // Recompute derived stats immediately
             player->UpdateAllStats();
             player->UpdateMaxHealth();
             player->UpdateAttackPowerAndDamage(false);
@@ -107,21 +128,25 @@ public:
             player->UpdatePowerRegeneration();
             player->UpdatePvpPower();
 
+            // Defensive: ensure visible stats are not negative after recalculation
             if (int32(player->GetStat(STAT_STAMINA)) < 0) player->SetStat(STAT_STAMINA, 0);
             if (int32(player->GetStat(STAT_STRENGTH)) < 0) player->SetStat(STAT_STRENGTH, 0);
             if (int32(player->GetStat(STAT_AGILITY)) < 0) player->SetStat(STAT_AGILITY, 0);
             if (int32(player->GetStat(STAT_SPIRIT)) < 0) player->SetStat(STAT_SPIRIT, 0);
             if (int32(player->GetStat(STAT_INTELLECT)) < 0) player->SetStat(STAT_INTELLECT, 0);
 
+            // Clear stored deltas & mark as not boosted
             bk.lastPercentStamina = bk.lastPercentStrength = bk.lastPercentAgility = bk.lastPercentSpirit = bk.lastPercentIntellect = 0.0f;
             bk.lastFlatStamina = bk.lastFlatStrength = bk.lastFlatAgility = bk.lastFlatSpirit = bk.lastFlatIntellect = 0.0f;
             bk.lastAuraCount = 0;
             bk.valid = false;
             bk.lastWasAlive = (player->GetHealth() > 0 && !isGhost);
 
+            // restore CanModifyStats
             if (!oldCanModify)
                 player->SetCanModifyStats(false);
 
+            // Final refresh (do not force revive)
             player->UpdateAllStats();
             player->UpdateMaxHealth();
             player->UpdateAttackPowerAndDamage(false);
@@ -132,6 +157,7 @@ public:
             TC_LOG_INFO("module.balance", "Restored stats and cleared boost for playerGuidLow=%u", player->GetGUIDLow());
         }
 
+        // Ensure boost state consistent after map change
         EnsureBoost(player);
     }
 
@@ -140,26 +166,32 @@ public:
         if (!player) return;
 
         Map* map = player->GetMap();
+        // Only process boost logic if in a dungeon or raid
         if (!map || (!map->IsDungeon() && !map->IsRaid()))
             return;
 
         uint64 guid = player->GetGUID();
-        StatBackup& bk = statMap[guid];
+        StatBackup& bk = statMap[guid]; // will create default if not present
 
         uint32 auraCount = uint32(player->GetAppliedAuras().size());
         bool isAliveNow = (player->GetHealth() > 0 && !player->HasAura(8326));
 
         if (bk.valid)
         {
+            // aura change -> re-evaluate
             if (auraCount != bk.lastAuraCount)
             {
                 bk.lastAuraCount = auraCount;
                 EnsureBoost(player);
             }
 
+            // revive detected: lastWasAlive==false -> true
             if (!bk.lastWasAlive && isAliveNow)
             {
-                player->InitStatsForLevel(true);
+                // Reinitialize core stats so engine has correct base values
+                player->InitStatsForLevel(true); // reapply core modifiers and recalc base stats
+
+                // Recompute derived stats
                 player->UpdateAllStats();
                 player->UpdateMaxHealth();
                 player->UpdateAttackPowerAndDamage(false);
@@ -167,6 +199,7 @@ public:
                 player->UpdatePowerRegeneration();
                 player->UpdatePvpPower();
 
+                // Reapply instance boost now player is alive
                 EnsureBoost(player);
 
                 TC_LOG_INFO("module.balance", "Player %u revived in-instance: reinit stats and reapplied boosts", player->GetGUIDLow());
@@ -177,6 +210,7 @@ public:
         }
         else
         {
+            // store snapshot for future comparisons
             bk.lastAuraCount = auraCount;
             bk.lastWasAlive = isAliveNow;
         }
@@ -192,12 +226,16 @@ public:
         bool inInstance = map && (map->IsDungeon() || map->IsRaid());
         StatBackup& bk = statMap[guid];
 
+        // Only apply/remove boost logic if inside an instance
         if (inInstance)
         {
+            // If we don't have a stored base, capture it now (entering instance).
+            // Use Create stats to avoid saving transient spell-buffed values.
             if (!bk.valid)
             {
                 bk.ap = player->GetTotalAttackPowerValue(BASE_ATTACK);
                 bk.spellPower = player->GetBaseSpellPowerBonus();
+                // Use GetCreateStat to capture base stats (avoid capturing active spell auras)
                 bk.stamina = static_cast<int32>(player->GetCreateStat(STAT_STAMINA));
                 bk.strength = static_cast<int32>(player->GetCreateStat(STAT_STRENGTH));
                 bk.agility = static_cast<int32>(player->GetCreateStat(STAT_AGILITY));
@@ -216,16 +254,22 @@ public:
                     player->GetGUIDLow(), bk.stamina, bk.strength, bk.agility, bk.spirit, bk.intellect, bk.spellPower);
             }
 
+            // If player is dead/ghost, skip applying modifiers now.
+            // We keep bk.valid so we can reapply on revive (OnUpdate detects revive).
             if (player->GetHealth() == 0 || player->HasAura(8326))
             {
+                // update lastWasAlive so OnUpdate can detect the revive transition
                 bk.lastWasAlive = false;
                 return;
             }
 
+            // At this point player is alive and inside an instance -> ensure modifiers are applied once.
+            // Save and set CanModifyStats for engine acceptance
             bool oldCanModify = player->CanModifyStats();
             if (!oldCanModify)
                 player->SetCanModifyStats(true);
 
+            // Remove previous engine-percent/fallback deltas (defensive)
             removePercentMod(player, STAT_STAMINA, bk.lastPercentStamina);
             removePercentMod(player, STAT_STRENGTH, bk.lastPercentStrength);
             removePercentMod(player, STAT_AGILITY, bk.lastPercentAgility);
@@ -238,6 +282,7 @@ public:
             removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_SPIRIT, bk.lastFlatSpirit);
             removeDirectFlat(player, UNIT_FIELD_STAT_POS_BUFF + STAT_INTELLECT, bk.lastFlatIntellect);
 
+            // Calculate multiplier with diminishing returns for missing players
             Group* group = player->GetGroup();
             uint32 groupSize = group ? group->GetMembersCount() : 1;
 
@@ -261,11 +306,13 @@ public:
             if (groupSize > maxGroupCap) groupSize = maxGroupCap;
             uint32 missing = (groupSize < maxGroupCap) ? (maxGroupCap - groupSize) : 0;
 
+            // Diminishing returns: effectiveMissing = missing^diminishingExp
             float effectiveMissing = (missing == 0) ? 0.0f : std::pow(static_cast<float>(missing), diminishingExp);
             float rawBoost = effectiveMissing * boostPerMissing;
             float ratio = std::min(rawBoost, maxTotalBoost);
             float multiplier = 1.0f + ratio;
 
+            // Apply percent mods (engine path + fallback)
             applyPercentMod(player, STAT_STAMINA, ratio);
             applyPercentMod(player, STAT_STRENGTH, ratio);
             applyPercentMod(player, STAT_AGILITY, ratio);
@@ -279,6 +326,7 @@ public:
             bk.lastPercentSpirit = percentPoints;
             bk.lastPercentIntellect = percentPoints;
 
+            // Spell power
             uint32 baseSP = bk.spellPower;
             uint32 newSP = static_cast<uint32>(static_cast<float>(baseSP) * multiplier);
             int32 newSpDelta = static_cast<int32>(newSP) - static_cast<int32>(baseSP);
@@ -294,6 +342,7 @@ public:
 
             bk.spApplied = newSpDelta;
 
+            // Recalculate derived stats and write visible flat deltas
             player->UpdateAllStats();
 
             {
@@ -330,12 +379,14 @@ public:
                 bk.lastFlatIntellect = deltaInt;
             }
 
+            // Recalculate other derived stats
             player->UpdateMaxHealth();
             player->UpdateAttackPowerAndDamage(false);
             player->UpdateAllRatings();
             player->UpdatePowerRegeneration();
             player->UpdatePvpPower();
 
+            // restore CanModifyStats to original state
             if (!oldCanModify)
                 player->SetCanModifyStats(false);
 
@@ -346,6 +397,7 @@ public:
         }
         else
         {
+            // Not in instance: remove previously applied mods if present (existing logic)
             if (!bk.valid)
                 return;
 
@@ -379,6 +431,7 @@ public:
             bk.lastAuraCount = 0;
             bk.lastWasAlive = (player->GetHealth() > 0 && !player->HasAura(8326));
 
+            // restore CanModifyStats
             if (!oldCanModify)
                 player->SetCanModifyStats(false);
 
@@ -399,8 +452,11 @@ private:
     static void removePercentMod(Player* player, Stats stat, float prevPercent)
     {
         if (prevPercent == 0.0f) return;
+
+        // Remove via public API (stack-aware)
         player->ApplyStatPercentBuffMod(stat, prevPercent, false);
 
+        // Defensive: subtract our percent from engine internal slot instead of zeroing it.
         UnitMods fallbackMod = UNIT_MOD_STAT_STRENGTH;
         switch (stat)
         {
@@ -415,7 +471,7 @@ private:
         float current = player->GetModifierValue(fallbackMod, TOTAL_PCT);
         float newVal = current - prevPercent;
         if (newVal < 0.0f)
-            newVal = 0.0f;
+            newVal = 0.0f; // never negative
         player->SetModifierValue(fallbackMod, TOTAL_PCT, newVal);
     }
 
@@ -424,14 +480,17 @@ private:
         if (ratio == 0.0f) return;
 
         float percentPoints = ratio * 100.0f;
+        // Call public API (stack-aware)
         player->ApplyStatPercentBuffMod(stat, percentPoints, true);
 
+        // Add our percent to engine internal slot rather than overwrite it.
         UnitMods fallbackMod = UNIT_MOD_STAT_STRENGTH;
         switch (stat)
         {
         case STAT_STRENGTH:  fallbackMod = UNIT_MOD_STAT_STRENGTH; break;
         case STAT_AGILITY:   fallbackMod = UNIT_MOD_STAT_AGILITY;  break;
         case STAT_STAMINA:   fallbackMod = UNIT_MOD_STAT_STAMINA;  break;
+      
         case STAT_INTELLECT: fallbackMod = UNIT_MOD_STAT_INTELLECT; break;
         case STAT_SPIRIT:    fallbackMod = UNIT_MOD_STAT_SPIRIT;   break;
         default: fallbackMod = UNIT_MOD_STAT_STRENGTH; break;
@@ -454,6 +513,7 @@ private:
     }
 };
 
+// static member definitions
 std::unordered_map<uint64, StatBackup> mod_balance::statMap;
 float mod_balance::boostPerMissing = 0.03f;
 float mod_balance::maxTotalBoost = 0.50f;
@@ -465,7 +525,7 @@ float mod_balance::diminishingExp = 0.5f;
  * the spell id(s) to this script name ("spell_balance_hook"), or use existing tooling
  * that assigns script loaders to spell ids.
  *
- * The AuraScript calls `mod_balance::EnsureBoost(Player*)` on apply/remove.
+ * The AuraScript calls `balance_dungeon_boost::EnsureBoost(Player*)` on apply/remove.
  */
 class spell_balance_hook : public SpellScriptLoader
 {
@@ -492,6 +552,7 @@ public:
 
         void Register() override
         {
+            // Use EFFECT_ALL to avoid multiple registrations and ensure we catch any effect index.
             OnEffectApply += AuraEffectApplyFn(spell_balance_hook_AuraScript::OnApply, EFFECT_ALL, SPELL_AURA_ANY, AURA_EFFECT_HANDLE_REAL);
             OnEffectRemove += AuraEffectRemoveFn(spell_balance_hook_AuraScript::OnRemove, EFFECT_ALL, SPELL_AURA_ANY, AURA_EFFECT_HANDLE_REAL);
         }
@@ -505,7 +566,9 @@ public:
 
 void AddSC_mod_balance()
 {
-    TC_LOG_INFO("module.balance", "AddSC_mod_balance called");
+    TC_LOG_INFO("module.balance", "AddSC_balance_dungeon_boost called");
     new mod_balance();
+
+    // Register the aura hook loader — bind to spell ids in DB as needed.
     new spell_balance_hook();
 }
