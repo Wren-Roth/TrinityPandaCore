@@ -626,7 +626,14 @@ protected:
                     levelScale = std::max(levelScale, minScale);
 
                     float statBonus = difficulty * solocraftConfig.SoloCraftStatsMult * levelScale;
+
+                    // Apply a lower multiplier for agility and strength to avoid excessive dodge/parry
+                    if (i == STAT_AGILITY || i == STAT_STRENGTH)
+                        statBonus *= 0.15f; // Only 15% of the normal bonus
+
                     player->HandleStatModifier(UnitMods(UNIT_MOD_STAT_START + i), TOTAL_VALUE, statBonus, true);
+                    player->UpdateDodgePercentage();
+                    player->UpdateParryPercentage();
                 }
 
                 player->SetFullHealth();
@@ -716,10 +723,9 @@ protected:
 
         return GroupDifficulty;
     }
-
     void ClearBuffs(Player* player, Map* map)
     {
-        QueryResult result = CharacterDatabase.PQuery("SELECT `guid`, `Difficulty`, `GroupSize`, `SpellPower`, `Stats` FROM `custom_solocraft_character_stats` WHERE `guid` = %lu", player->GetGUID() );
+        QueryResult result = CharacterDatabase.PQuery("SELECT `guid`, `Difficulty`, `GroupSize`, `SpellPower`, `Stats` FROM `custom_solocraft_character_stats` WHERE `guid` = %lu", player->GetGUID());
 
         if (result)
         {
@@ -729,9 +735,25 @@ protected:
 
             ChatHandler(player->GetSession()).PSendSysMessage(player->GetSession()->GetTrinityString(SOLOCRAFT_TRINITYSTRING_CLEAR_BUFFS), player->GetName().c_str(), map->GetMapName(), difficulty, SpellPowerBonus);
 
+            // Recalculate the exact per-stat modifier that was applied in ApplyBuffs
+            float maxLevel = 90.0f;                // must match ApplyBuffs
+            float exponent = 4.0f;                 // must match ApplyBuffs
+            float minScale = 0.05f;                // must match ApplyBuffs
+            float rawLevel = static_cast<float>(player->getLevel()) / maxLevel;
+            float levelScale = pow(rawLevel, exponent);
+            levelScale = std::max(levelScale, minScale);
+
             for (int32 i = STAT_STRENGTH; i < MAX_STATS; ++i)
             {
-                player->HandleStatModifier(UnitMods(UNIT_MOD_STAT_START + i), TOTAL_VALUE, difficulty * StatsMultPct, false);
+                // compute the same statBonus that was applied
+                float statRemove = difficulty * StatsMultPct * levelScale;
+
+                // account for the reduced multiplier applied to Strength/Agility in ApplyBuffs
+                if (i == STAT_AGILITY || i == STAT_STRENGTH)
+                    statRemove *= 0.15f; // must match the ApplyBuffs reduction
+
+                // remove the exact applied modifier
+                player->HandleStatModifier(UnitMods(UNIT_MOD_STAT_START + i), TOTAL_VALUE, statRemove, false);
             }
 
             if (player->GetPowerType() == POWER_MANA && difficulty > 0)
@@ -749,7 +771,13 @@ protected:
                 player->GetGUID()
             );
         }
+
+        // Recalculate stats after removing modifiers
+        player->UpdateAllStats();
+        player->UpdateDodgePercentage();
+        player->UpdateParryPercentage();
     }
+    
 };
 
 void AddSC_solocraft_system()
