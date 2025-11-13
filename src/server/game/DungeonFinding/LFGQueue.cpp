@@ -157,7 +157,11 @@ bool Bucket::CanAdd(Queuer const& queuer, LfgRolesMap& assignedRoles) const
         check = LFGMgr::CheckDpsOnly;
 
     if (!check(assignedRoles, m_queue->GetRoleSlots(PLAYER_ROLE_TANK), m_queue->GetRoleSlots(PLAYER_ROLE_HEALER), m_queue->GetRoleSlots(PLAYER_ROLE_DAMAGE)))
+    {
+        if (sWorld->getBoolConfig(CONFIG_LFG_SOLO))
+            return true;
         return false;
+    }
 
     return true;
 }
@@ -171,12 +175,25 @@ void Bucket::Add(Queuer const& queuer)
     {
         switch (m_queuerPlayerRoles[playerGUID] = (LfgRoles)(assignedRoles[playerGUID] & ~PLAYER_ROLE_LEADER))
         {
-            case PLAYER_ROLE_TANK:   m_tanks.push_back(queuer); break;
-            case PLAYER_ROLE_HEALER: m_healers.push_back(queuer); break;
-            case PLAYER_ROLE_DAMAGE: m_damage.push_back(queuer); break;
-            default: ASSERT(false);
+        case PLAYER_ROLE_TANK:
+            if (sWorld->getBoolConfig(CONFIG_LFG_SOLO))
+                m_damage.push_back(queuer);
+            else
+                m_tanks.push_back(queuer);
+            break;
+        case PLAYER_ROLE_HEALER:
+            if (sWorld->getBoolConfig(CONFIG_LFG_SOLO))
+                m_damage.push_back(queuer);
+            else
+                m_healers.push_back(queuer);
+            break;
+        case PLAYER_ROLE_DAMAGE:
+            m_damage.push_back(queuer);
+            break;
+        default: ASSERT(false);
+
         }
-    };
+        };
 
     // Readd old queuers with new roles
     m_tanks.clear();
@@ -475,6 +492,12 @@ QueueManager::QueueManager()
         if (map && map->IsScenario() && scenarioDebug)
             dps = 1;
 
+        if (sWorld->getBoolConfig(CONFIG_LFG_SOLO))
+        {
+            tank = 0;
+            heal = 0;
+            dps = 1;
+        }
         m_queues.emplace(dungeon->ID, DungeonQueue{ this, dungeon->ID, tank, heal, dps, raid });
     }
 
