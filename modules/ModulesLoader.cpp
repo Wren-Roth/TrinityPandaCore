@@ -15,7 +15,7 @@ void AddSC_mod_example();
 void AddModulesScripts()
 {
     // Modules
-    AddSC_mod_balance();
+        AddSC_mod_balance();
     AddSC_mod_items();
     AddSC_mod_leech();
     AddSC_mod_example();
