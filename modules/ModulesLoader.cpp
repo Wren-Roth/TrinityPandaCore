@@ -3,7 +3,7 @@
 #include <string>
 
 // Includes list
-void AddSC_mod_balance();
+void AddSC_solocraft_system();
 void AddSC_mod_items();
 void AddSC_mod_leech();
 void AddSC_mod_example();
@@ -15,7 +15,7 @@ void AddSC_mod_example();
 void AddModulesScripts()
 {
     // Modules
-        AddSC_mod_balance();
+    AddSC_solocraft_system();
     AddSC_mod_items();
     AddSC_mod_leech();
     AddSC_mod_example();
