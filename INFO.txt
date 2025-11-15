@@ -40,6 +40,8 @@ WPL          =  can finish
 
 EPL          = can finish
 
+badlands     = can finish
+
 Wandering isle = works, can finish
 
 gilneas = works, can finish
