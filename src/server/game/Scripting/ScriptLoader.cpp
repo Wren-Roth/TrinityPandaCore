@@ -331,6 +331,7 @@ void AddSC_blasted_lands();
 void AddSC_burning_steppes();
 void AddSC_duskwood();
 void AddSC_eastern_plaguelands();
+void AddSC_zone_badlands();
 void AddSC_eversong_woods();
 void AddSC_ghostlands();
 void AddSC_gilneas();
@@ -1358,6 +1359,7 @@ void AddEasternKingdomsScripts()
     AddSC_burning_steppes();
     AddSC_duskwood();
     AddSC_eastern_plaguelands();
+    AddSC_zone_badlands();
     AddSC_eversong_woods();
     AddSC_ghostlands();
     AddSC_gilneas();
