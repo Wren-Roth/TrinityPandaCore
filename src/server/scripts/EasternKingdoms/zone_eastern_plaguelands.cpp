@@ -97,22 +97,46 @@ public:
 /*######
 ## npc_darrowshire_spirit
 ######*/
+// npc_darrowshire_spirit — play die spell 3 times (every 1.5s) then despawn
 
-enum DarrowshireSpirit
+enum DarrowshireSpiritDefs
 {
-    SPELL_SPIRIT_SPAWNIN    = 17321
+    SPELL_SPIRIT_SPAWNIN = 17321,
+    SPELL_DIE_EFFECT = 99634,
+
+    ACTION_PLAY_DIE_SEQUENCE = 1
 };
 
 class npc_darrowshire_spirit : public CreatureScript
 {
 public:
-    npc_darrowshire_spirit() : CreatureScript("npc_darrowshire_spirit") { }
+    npc_darrowshire_spirit() : CreatureScript("npc_darrowshire_spirit") {}
 
     bool OnGossipHello(Player* player, Creature* creature) override
     {
+        // Prevent re-triggering if sequence already started on this NPC
+        if (creature->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE))
+        {
+            player->SEND_GOSSIP_MENU(3873, creature->GetGUID());
+            return true;
+        }
+
         player->SEND_GOSSIP_MENU(3873, creature->GetGUID());
         player->TalkedToCreature(creature->GetEntry(), creature->GetGUID());
+
+        // Give quest credit immediately for the original spirit entry.
+        player->KilledMonsterCredit(creature->GetEntry());
+
+        // Prevent further interaction while we play the effect
         creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+
+        // Instruct this creature's AI to run the die sequence (3 casts @ 1.5s)
+        if (CreatureAI* ai = creature->AI())
+        {
+            if (auto* specificAI = static_cast<npc_darrowshire_spirit::npc_darrowshire_spiritAI*>(ai))
+                specificAI->DoAction(ACTION_PLAY_DIE_SEQUENCE);
+        }
+
         return true;
     }
 
@@ -123,17 +147,97 @@ public:
 
     struct npc_darrowshire_spiritAI : public ScriptedAI
     {
-        npc_darrowshire_spiritAI(Creature* creature) : ScriptedAI(creature) { }
+        explicit npc_darrowshire_spiritAI(Creature* creature)
+            : ScriptedAI(creature), m_running(false), m_castsRemaining(0), m_castTimer(0), m_despawnTimer(0)
+        {
+        }
 
         void Reset() override
         {
             DoCast(me, SPELL_SPIRIT_SPAWNIN);
             me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+            m_running = false;
+            m_castsRemaining = 0;
+            m_castTimer = 0;
+            m_despawnTimer = 0;
         }
 
-        void EnterCombat(Unit* /*who*/) override { }
+        void EnterCombat(Unit* /*who*/) override {}
+
+
+        void DoAction(int32 action) override
+        {
+            if (action == ACTION_PLAY_DIE_SEQUENCE && !m_running)
+            {
+                m_running = true;
+                m_castsRemaining = 3;        // total casts
+
+                // Make the NPC non-selectable and non-attackable BEFORE casting
+                me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_ATTACKABLE_1);
+
+                // Ensure it's passive and out of combat state
+                me->CombatStop();
+                me->DeleteThreatList();
+                me->AttackStop();
+                me->RemoveAllAuras();
+
+                // Set react state to passive so it won't try to fight back (engine provides this on Unit)
+                me->SetReactState(REACT_PASSIVE);
+
+                // perform first cast immediately
+                DoCast(me, SPELL_DIE_EFFECT);
+                --m_castsRemaining;
+
+                // schedule next cast in 1500ms
+                m_castTimer = 1500;
+                m_despawnTimer = 0;
+            }
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            if (m_running)
+            {
+                if (m_castsRemaining > 0)
+                {
+                    if (m_castTimer > diff)
+                        m_castTimer -= diff;
+                    else
+                    {
+                        // time to cast
+                        DoCast(me, SPELL_DIE_EFFECT);
+                        --m_castsRemaining;
+                        m_castTimer = 1500; // next cast in 1.5s (if any)
+                    }
+                }
+                else
+                {
+                    // all casts done — start short despawn timer (keep last visual visible)
+                    if (m_despawnTimer == 0)
+                        m_despawnTimer = 500; // 0.5s after last cast
+                    if (m_despawnTimer > diff)
+                        m_despawnTimer -= diff;
+                    else
+                    {
+                        m_running = false;
+                        me->DespawnOrUnsummon();
+                        return;
+                    }
+                }
+            }
+
+            ScriptedAI::UpdateAI(diff);
+        }
+
+    private:
+        bool m_running;
+        int32 m_castsRemaining;
+        uint32 m_castTimer;
+        uint32 m_despawnTimer;
     };
 };
+
 
 /*######
 ## npc_tirion_fordring
@@ -273,9 +377,91 @@ struct npc_scourge_siege_engineer : public ScriptedAI
     }
 };
 
+enum questfixes
+{
+    QUEST_NOBODY_TO_BLAME = 27489,
+	QUEST_GIDWINS_FATE = 27526,
+	QUEST_FUSELIGHT_HO = 27762,
+};
+
+class nobody_to_blamefix : public CreatureScript
+{
+public:
+    nobody_to_blamefix() : CreatureScript("npc_nobody_to_blamefix") {}
+
+    bool OnQuestAccept(Player* player, Creature* creature, Quest const* quest) override
+    {
+        if (!quest)
+            return false;
+
+        // Only handle the specific quest we're fixing
+        if (quest->GetQuestId() != QUEST_NOBODY_TO_BLAME)
+            return false;
+
+        // Only complete if player currently has the quest (incomplete)
+        if (player->GetQuestStatus(QUEST_NOBODY_TO_BLAME) == QUEST_STATUS_INCOMPLETE)
+            player->CompleteQuest(QUEST_NOBODY_TO_BLAME, creature);
+
+        // Teleport only for this quest accept
+        player->TeleportTo(0, 3147.56f, -4332.05f, 132.25f, 5.297140f); // teleport to northpass
+        return true;
+    }
+};
+
+
+class gidwin_fix : public CreatureScript
+{
+public:
+    gidwin_fix() : CreatureScript("npc_gidwin_fix") {}
+
+    bool OnQuestAccept(Player* player, Creature* creature, Quest const* quest) override
+    {
+        if (!quest)
+            return false;
+
+        // Only handle the specific quest we're fixing
+        if (quest->GetQuestId() != QUEST_GIDWINS_FATE)
+            return false;
+
+        // Only complete if player currently has the quest (incomplete)
+        if (player->GetQuestStatus(QUEST_GIDWINS_FATE) == QUEST_STATUS_INCOMPLETE)
+            player->CompleteQuest(QUEST_GIDWINS_FATE, creature);
+
+      
+        return true;
+    }
+};
+
+class fuselight_ho_fix : public CreatureScript
+{
+public:
+    fuselight_ho_fix() : CreatureScript("npc_fuselight_ho_fix") {}
+
+    bool OnQuestAccept(Player* player, Creature* creature, Quest const* quest) override
+    {
+        if (!quest)
+            return false;
+
+        // Only handle the specific quest we're fixing
+        if (quest->GetQuestId() != QUEST_FUSELIGHT_HO)
+            return false;
+
+        // Only complete if player currently has the quest (incomplete)
+        if (player->GetQuestStatus(QUEST_FUSELIGHT_HO) == QUEST_STATUS_INCOMPLETE)
+            player->CompleteQuest(QUEST_FUSELIGHT_HO, creature);
+
+        // Teleport only for this quest accept
+        player->TeleportTo(0, -6651.76f, -4760.20f, 7.56f, 1.719540f); // teleport to fuselight at the sea
+        return true;
+    }
+};
+
 void AddSC_eastern_plaguelands()
 {
     new npc_ghoul_flayer();
+	new gidwin_fix();
+	new fuselight_ho_fix();
+	new nobody_to_blamefix();
     new npc_augustus_the_touched();
     new npc_darrowshire_spirit();
     new npc_tirion_fordring();
