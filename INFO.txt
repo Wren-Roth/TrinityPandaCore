@@ -16,19 +16,29 @@ Brawlers guild = working, up to rank 8. use item "Brawler's Guild rep fix" avail
 
 Proving Grounds = Seems to work, i tried on a green geared shadowpriest and failed bronze.. should work all the way to gold.
 
+Solo LFG added.
+
+solocraft balancing added.
+
 ZONES:
 
 Northshire - complete
 
 Elwynn Forest = complete
 
-Westfall = can finish
+Westfall     = can finish
 
-redridge = can finish
+redridge     = can finish
 
-duskwood = can finish
+duskwood     = can finish
 
-North stv = can finish
+STV NORTH    = can finish
+
+STV CAPE     = can finish
+
+WPL          =  can finish
+
+EPL          = can finish
 
 Wandering isle = works, can finish
 
