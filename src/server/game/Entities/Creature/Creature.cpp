@@ -2371,9 +2371,30 @@ void Creature::ProhibitSpellSchool(SpellSchoolMask idSchoolMask, uint32 unTimeMs
 
 void Creature::PrepareChanneledCast(float facing, uint32 spell_id, bool triggered)
 {
+    // Stop combat and movement so caster doesn't walk while casting.
     AttackStop();
+
+    // Ensure AI/react won't try to move during cast.
     SetReactState(REACT_PASSIVE);
     SetFacingTo(facing);
+
+    // Stop movement immediately:
+    // - Stop client movement
+    // - Finalize/abort any active MoveSpline so the creature does not finish the spline
+    // - Clear motion master without triggering movement callbacks
+    StopMoving();
+
+    if (movespline && !movespline->Finalized())
+        movespline->_Finalize(); // abort current spline immediately
+
+    // Clear motion generators without executing their exit code (avoid finishing movement callbacks)
+    GetMotionMaster()->Clear(false);
+
+    // Ensure the motion master is idle (server-side)
+    GetMotionMaster()->MoveIdle();
+
+    // Mark unit as casting to block other movement/rotation actions while casting.
+    AddUnitState(UNIT_STATE_CASTING);
 
     if (spell_id)
         CastSpell(this, spell_id, triggered);
@@ -2381,6 +2402,9 @@ void Creature::PrepareChanneledCast(float facing, uint32 spell_id, bool triggere
 
 void Creature::RemoveChanneledCast(uint64 target)
 {
+    // Remove casting state so normal movement/AI can resume.
+    ClearUnitState(UNIT_STATE_CASTING);
+
     SetReactState(REACT_AGGRESSIVE);
 
     if (Unit* itr = ObjectAccessor::GetUnit(*this, target))
