@@ -72,7 +72,7 @@ Map::~Map()
 
     if (!m_scriptSchedule.empty())
         sScriptMgr->DecreaseScheduledScriptCount(m_scriptSchedule.size());
-
+    if (GetId() != 961)
     MMAP::MMapFactory::createOrGetMMapManager()->unloadMapInstance(GetId(), i_InstanceId);
 }
 
@@ -127,6 +127,8 @@ bool Map::ExistVMap(uint32 mapid, int gx, int gy)
 void Map::LoadMMap(int gx, int gy)
 {
     bool mmapLoadResult = MMAP::MMapFactory::createOrGetMMapManager()->loadMap((sWorld->GetDataPath() + "mmaps").c_str(), GetId(), gx, gy, !m_mmapErrorReportEnabled);
+    if (GetId() == 961)
+        return;
 
     if (mmapLoadResult)
         TC_LOG_DEBUG("maps", "MMAP loaded name:%s, id:%d, x:%d, y:%d (mmap rep.: x:%d, y:%d)", GetMapName(), GetId(), gx, gy, gx, gy);
@@ -1593,6 +1595,11 @@ bool Map::UnloadGrid(NGridType& ngrid, bool unloadAll)
             }
             VMAP::VMapFactory::createOrGetVMapManager()->unloadMap(GetId(), gx, gy);
             MMAP::MMapFactory::createOrGetMMapManager()->unloadMap(GetId(), gx, gy);
+
+
+            // Only unload MMAP for maps other than Stormstout Brewery (971)
+            if (GetId() != 961)
+                MMAP::MMapFactory::createOrGetMMapManager()->unloadMap(GetId(), gx, gy);
         }
         else
             ((MapInstanced*)m_parentMap)->RemoveGridMapReference(GridCoord(gx, gy));
@@ -2734,6 +2741,8 @@ bool Map::isInLineOfSight(float x1, float y1, float z1, float x2, float y2, floa
 {
     if (DisableMgr::IsDisabledFor(DISABLE_TYPE_VMAP, GetId(), NULL, VMAP_DISABLE_LOS))
         return true;
+	if (GetId() == 961) //temp fix for stormstout brewery
+        return _dynamicTree.isInLineOfSight(x1, y1, z1, x2, y2, z2, phasemask);
 
     return VMAP::VMapFactory::createOrGetVMapManager()->isInLineOfSight(GetId(), x1, y1, z1, x2, y2, z2)
         && _dynamicTree.isInLineOfSight(x1, y1, z1, x2, y2, z2, phasemask);

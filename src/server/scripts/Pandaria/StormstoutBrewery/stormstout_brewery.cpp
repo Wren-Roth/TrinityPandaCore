@@ -2,6 +2,7 @@
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "SpellScript.h"
+#include "MMapFactory.h"
 
 enum eHabaneroBeer
 {
@@ -491,7 +492,7 @@ class npc_hozen_party_animal : public CreatureScript
 
         struct npc_hozen_party_animalAI : public ScriptedAI
         {
-            npc_hozen_party_animalAI(Creature* creature) : ScriptedAI(creature) { }
+            npc_hozen_party_animalAI(Creature* creature) : ScriptedAI(creature) {}
 
             bool canAggroMore;
             uint32 waypoint;
@@ -516,7 +517,7 @@ class npc_hozen_party_animal : public CreatureScript
 
             void Reset() override
             {
-                events.ScheduleEvent(EVENT_FIREWORK, urand(2, 28)*IN_MILLISECONDS);
+                events.ScheduleEvent(EVENT_FIREWORK, urand(2, 28) * IN_MILLISECONDS);
 
                 if (uint32 hatId = Trinity::Containers::SelectRandomContainerElement(hats))
                     me->CastSpell(me, hatId, false);
@@ -537,6 +538,50 @@ class npc_hozen_party_animal : public CreatureScript
 
             void EnterCombat(Unit* who) override
             {
+                // Make this hozen aggressive but do NOT auto-target nearest player when who == nullptr.
+                me->SetReactState(REACT_AGGRESSIVE);
+
+                bool enablePathfinding = MMAP::MMapFactory::IsPathfindingEnabledForCreature(me->GetEntry());
+
+                if (who)
+                {
+                    // If attacker is a rolling barrel, try to resolve the actual player culprit (rider/charmer).
+                    Player* targetPlayer = nullptr;
+                    if (who->ToCreature() && who->ToCreature()->GetEntry() == 56682) // NPC_ROLLING_BARREL
+                    {
+                        // Prefer explicit charmer
+                        if (Unit* charmer = who->GetCharmer())
+                            targetPlayer = charmer->ToPlayer();
+                        else
+                        {
+                            // Fallback: nearby player who is flagged as forced-movement (likely the rider)
+                            if (Player* p = who->FindNearestPlayer(6.0f))
+                                if (p->HasFlag(UNIT_FIELD_FLAGS2, UNIT_FLAG2_FORCE_MOVEMENT))
+                                    targetPlayer = p;
+                        }
+                    }
+                    else if (who->ToPlayer())
+                    {
+                        // direct player attacker
+                        targetPlayer = who->ToPlayer();
+                    }
+
+                    Unit* chaseTarget = targetPlayer ? static_cast<Unit*>(targetPlayer) : who;
+
+                    if (chaseTarget)
+                    {
+                        if (enablePathfinding)
+                            me->GetMotionMaster()->MoveChase(chaseTarget);
+                        else
+                            me->GetMotionMaster()->MoveFollow(chaseTarget, 0.0f, 0.0f);
+
+                        if (me->CanCreatureAttack(chaseTarget, false))
+                            AttackStart(chaseTarget);
+                    }
+                }
+
+                // Notify nearby same-entry hozen to enter combat (keeps existing behavior) but they
+                // will not pick a nearest player by themselves because EnterCombat won't call FindNearestPlayer.
                 std::list<Creature*> temp;
                 GetCreatureListWithEntryInGrid(temp, me, me->GetEntry(), 15.f);
 
@@ -555,6 +600,49 @@ class npc_hozen_party_animal : public CreatureScript
                 events.CancelEvent(EVENT_FIREWORK);
             }
 
+            void DamageTaken(Unit* attacker, uint32& damage) override
+            {
+                // If damaged by a barrel explosion, set target to the barrel's rider/culprit (or direct player attacker).
+                if (!attacker || damage == 0)
+                    return;
+
+                Player* culprit = nullptr;
+
+                // Damaged by a barrel creature
+                if (attacker->ToCreature() && attacker->ToCreature()->GetEntry() == 56682) // NPC_ROLLING_BARREL
+                {
+                    // Prefer explicit charmer (if any)
+                    if (Unit* charmer = attacker->GetCharmer())
+                        culprit = charmer->ToPlayer();
+                    else
+                    {
+                        // Fallback: find nearby player riding the barrel (force movement flag)
+                        if (Player* p = attacker->FindNearestPlayer(6.0f))
+                            if (p->HasFlag(UNIT_FIELD_FLAGS2, UNIT_FLAG2_FORCE_MOVEMENT))
+                                culprit = p;
+                    }
+                }
+                else if (attacker->ToPlayer())
+                {
+                    // Damaged directly by a player
+                    culprit = attacker->ToPlayer();
+                }
+
+                if (culprit && culprit->IsAlive())
+                {
+                    me->SetReactState(REACT_AGGRESSIVE);
+
+                    bool enablePathfinding = MMAP::MMapFactory::IsPathfindingEnabledForCreature(me->GetEntry());
+                    if (enablePathfinding)
+                        me->GetMotionMaster()->MoveChase(culprit);
+                    else
+                        me->GetMotionMaster()->MoveFollow(culprit, 0.0f, 0.0f);
+
+                    if (me->CanCreatureAttack(culprit, false))
+                        AttackStart(culprit);
+                }
+            }
+
             void MovementInform(uint32 type, uint32 pointId) override
             {
                 if (type != POINT_MOTION_TYPE)
@@ -562,17 +650,17 @@ class npc_hozen_party_animal : public CreatureScript
 
                 switch (pointId)
                 {
-                    case 0:
-                    case 1:
-                    case 2:
-                    case 3:
-                    case 4:
-                    case 5:
-                        events.ScheduleEvent(EVENT_MOVE, 100);
-                        break;
-                    case 6:
-                        me->DespawnOrUnsummon();
-                        break;
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                case 4:
+                case 5:
+                    events.ScheduleEvent(EVENT_MOVE, 100);
+                    break;
+                case 6:
+                    me->DespawnOrUnsummon();
+                    break;
                 }
 
                 waypoint++;
@@ -580,30 +668,26 @@ class npc_hozen_party_animal : public CreatureScript
 
             void UpdateAI(uint32 diff) override
             {
-                events.Update(diff);
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_MOVE:
-                            Move();
-                            break;
-                        case EVENT_FIREWORK:
-                            if (uint32 fireworkId = Trinity::Containers::SelectRandomContainerElement(fireworks))
-                                me->CastSpell(me, fireworkId, false);
-
-                            events.ScheduleEvent(EVENT_FIREWORK, urand(2, 28)*IN_MILLISECONDS);
-                            break;
-                    }
-                }
-
+                // existing event handling should remain above/below as needed
+                // ensure combat movement is maintained
                 if (!UpdateVictim())
                     return;
 
-                DoMeleeAttackIfReady();
+                Unit* victim = me->GetVictim();
+                if (!victim)
+                    return;
+
+                bool enablePathfinding = MMAP::MMapFactory::IsPathfindingEnabledForCreature(me->GetEntry());
+
+                if (enablePathfinding)
+                    me->GetMotionMaster()->MoveChase(victim);
+                else
+                    me->GetMotionMaster()->MoveFollow(victim, 0.0f, 0.0f);
+
+                if (me->CanCreatureAttack(victim, false))
+                    DoMeleeAttackIfReady();
             }
-        };
+		};
 
         CreatureAI* GetAI(Creature* creature) const override
         {
@@ -701,36 +785,91 @@ class npc_hozen_bouncer : public CreatureScript
 
 class npc_controlled_hozen : public CreatureScript
 {
-    public:
-        npc_controlled_hozen() : CreatureScript("npc_controlled_hozen") { }
+public:
+    npc_controlled_hozen() : CreatureScript("npc_controlled_hozen") {}
 
-        struct npc_controlled_hozenAI : public ScriptedAI
+    struct npc_controlled_hozenAI : public ScriptedAI
+    {
+        npc_controlled_hozenAI(Creature* creature) : ScriptedAI(creature) {}
+
+        void EnterEvadeMode() override
         {
-            npc_controlled_hozenAI(Creature* creature) : ScriptedAI(creature) { }
-
-            void EnterEvadeMode() override
-            {
-                me->CombatStop(true);
-                me->AttackStop();
-                me->RemoveAllAurasExceptType(SPELL_AURA_PROC_TRIGGER_SPELL);
-                me->GetMotionMaster()->MoveTargetedHome();
-            }
-
-            void EnterCombat(Unit* /*who*/) override
-            {
-                std::list<Creature*> temp;
-                GetCreatureListWithEntryInGrid(temp, me, me->GetEntry(), 60.f);
-
-                for (auto&& creature : temp)
-                    if (creature->IsAlive() && !creature->IsInCombat())
-                        creature->AI()->DoZoneInCombat();
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return new npc_controlled_hozenAI(creature);
+            me->CombatStop(true);
+            me->AttackStop();
+            me->RemoveAllAurasExceptType(SPELL_AURA_PROC_TRIGGER_SPELL);
+            me->GetMotionMaster()->MoveTargetedHome();
         }
+
+        void EnterCombat(Unit* who) override
+        {
+            me->SetReactState(REACT_AGGRESSIVE);
+
+            // Check if MMAP pathfinding is enabled for this creature entry.
+            bool enablePathfindingForCreature = MMAP::MMapFactory::IsPathfindingEnabledForCreature(me->GetEntry());
+
+            if (who)
+            {
+                if (enablePathfindingForCreature)
+                {
+                    me->GetMotionMaster()->MoveChase(who);
+                }
+                else
+                {
+                    // Fallback: follow/attack without relying on mmap path smoothing.
+                    me->GetMotionMaster()->MoveFollow(who, 0.0f, 0.0f);
+                }
+
+                if (me->CanCreatureAttack(who, false))
+                    AttackStart(who);
+            }
+            else
+            {
+                if (Unit* victim = me->FindNearestPlayer(40.0f))
+                {
+                    if (enablePathfindingForCreature)
+                        me->GetMotionMaster()->MoveChase(victim);
+                    else
+                        me->GetMotionMaster()->MoveFollow(victim, 0.0f, 0.0f);
+
+                    if (me->CanCreatureAttack(victim, false))
+                        AttackStart(victim);
+                }
+            }
+
+            // notify nearby same-entry hozen to enter combat
+            std::list<Creature*> temp;
+            GetCreatureListWithEntryInGrid(temp, me, me->GetEntry(), 60.f);
+
+            for (auto&& creature : temp)
+                if (creature->IsAlive() && !creature->IsInCombat())
+                    creature->AI()->DoZoneInCombat();
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            if (!UpdateVictim())
+                return;
+
+            Unit* victim = me->GetVictim();
+            if (!victim)
+                return;
+
+            bool enablePathfindingForCreature = MMAP::MMapFactory::IsPathfindingEnabledForCreature(me->GetEntry());
+
+            if (enablePathfindingForCreature)
+                me->GetMotionMaster()->MoveChase(victim);
+            else
+                me->GetMotionMaster()->MoveFollow(victim, 0.0f, 0.0f);
+
+            if (me->CanCreatureAttack(victim, false))
+                DoMeleeAttackIfReady();
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_controlled_hozenAI(creature);
+    }
 };
 
 // Habanero Brew 56731
