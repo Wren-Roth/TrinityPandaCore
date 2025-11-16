@@ -575,7 +575,6 @@ protected:
         else
             return classBalance;
     }
-
     void ApplyBuffs(Player* player, Map* map, float difficulty, int dunLevel, int numInGroup, int classBalance)
     {
         if (difficulty > 0)
@@ -608,6 +607,32 @@ protected:
                     player->GetGUID()
                 );
 
+                // Determine a class-based multiplier for Strength/Agility to avoid starving melee classes.
+                // Default multipliers tuned to provide sensible AP gain for melee:
+                // - Melee fighters (Warrior, Paladin, Death Knight, Rogue): 0.5
+                // - Monk: 0.6 (stronger melee scaling)
+                // - Hunter: 0.35 (ranged/agility special case)
+                // - Others: 1.0 (full stat bonus)
+                float meleeStatMultiplier = 1.0f;
+                switch (player->getClass())
+                {
+                case 1: // Warrior
+                case 2: // Paladin
+                case 4: // Rogue
+                case 6: // Death Knight
+                    meleeStatMultiplier = 0.5f;
+                    break;
+                case 10: // Monk
+                    meleeStatMultiplier = 0.6f;
+                    break;
+                case 3: // Hunter (ranged, agility but not same AP scaling)
+                    meleeStatMultiplier = 0.35f;
+                    break;
+                default:
+                    meleeStatMultiplier = 1.0f;
+                    break;
+                }
+
                 for (int32 i = STAT_STRENGTH; i < MAX_STATS; ++i)
                 {
                     if (result)
@@ -627,9 +652,9 @@ protected:
 
                     float statBonus = difficulty * solocraftConfig.SoloCraftStatsMult * levelScale;
 
-                    // Apply a lower multiplier for agility and strength to avoid excessive dodge/parry
+                    // Apply a class-based multiplier for agility and strength (avoid excessive dodge/parry while giving melee AP)
                     if (i == STAT_AGILITY || i == STAT_STRENGTH)
-                        statBonus *= 0.15f; // Only 15% of the normal bonus
+                        statBonus *= meleeStatMultiplier;
 
                     player->HandleStatModifier(UnitMods(UNIT_MOD_STAT_START + i), TOTAL_VALUE, statBonus, true);
                     player->UpdateDodgePercentage();
@@ -743,14 +768,35 @@ protected:
             float levelScale = pow(rawLevel, exponent);
             levelScale = std::max(levelScale, minScale);
 
+            // Mirror the class-based melee multiplier used when applying buffs
+            float meleeStatMultiplier = 1.0f;
+            switch (player->getClass())
+            {
+            case 1: // Warrior
+            case 2: // Paladin
+            case 4: // Rogue
+            case 6: // Death Knight
+                meleeStatMultiplier = 0.5f;
+                break;
+            case 10: // Monk
+                meleeStatMultiplier = 0.6f;
+                break;
+            case 3: // Hunter
+                meleeStatMultiplier = 0.35f;
+                break;
+            default:
+                meleeStatMultiplier = 1.0f;
+                break;
+            }
+
             for (int32 i = STAT_STRENGTH; i < MAX_STATS; ++i)
             {
                 // compute the same statBonus that was applied
                 float statRemove = difficulty * StatsMultPct * levelScale;
 
-                // account for the reduced multiplier applied to Strength/Agility in ApplyBuffs
+                // account for the class-based multiplier applied to Strength/Agility in ApplyBuffs
                 if (i == STAT_AGILITY || i == STAT_STRENGTH)
-                    statRemove *= 0.15f; // must match the ApplyBuffs reduction
+                    statRemove *= meleeStatMultiplier;
 
                 // remove the exact applied modifier
                 player->HandleStatModifier(UnitMods(UNIT_MOD_STAT_START + i), TOTAL_VALUE, statRemove, false);
@@ -777,7 +823,7 @@ protected:
         player->UpdateDodgePercentage();
         player->UpdateParryPercentage();
     }
-    
+
 };
 
 void AddSC_solocraft_system()
