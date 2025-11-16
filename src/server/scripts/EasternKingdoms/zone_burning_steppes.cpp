@@ -312,9 +312,84 @@ class npc_burning_steppes_chiseled_golem : public CreatureScript
         }
 };
 
+
+
+//done nothing wrong.
+// Clickable whelplings: grant kill credit and despawn when spell-clicked
+enum done_nothing_wrong
+{
+    QUEST_DONE_NOTHING_WRONG_HORDE_VERSION = 28172,
+    QUEST_DONE_NOTHING_WRONG_ALLIANCE_VERSION = 28417,
+
+    WELPLING_1 = 47814,
+    WELPLING_2 = 47822,
+    WELPLING_3 = 47821,
+    WELPLING_4 = 47820
+};
+
+class npc_whelplings : public CreatureScript
+{
+public:
+    npc_whelplings() : CreatureScript("npc_whelplings_click") {}
+
+    struct npc_whelplingsAI : public ScriptedAI
+    {
+        npc_whelplingsAI(Creature* creature) : ScriptedAI(creature) {}
+
+        void Reset() override
+        {
+            // Make the creature clickable by players and passive by default.
+            me->SetFlag(UNIT_FIELD_NPC_FLAGS, UNIT_NPC_FLAG_SPELLCLICK);
+            me->SetReactState(REACT_PASSIVE);
+        }
+
+        // Called when player clicks the creature (spellclick)
+        void OnSpellClick(Unit* clicker, bool& /*result*/) override
+        {
+            if (!clicker || clicker->GetTypeId() != TYPEID_PLAYER)
+                return;
+
+            Player* player = clicker->ToPlayer();
+            if (!player)
+                return;
+
+            uint32 entry = me->GetEntry();
+            bool isTarget = (entry == WELPLING_1 || entry == WELPLING_2 ||
+                entry == WELPLING_3 || entry == WELPLING_4);
+
+            if (!isTarget)
+                return;
+
+            // Only grant credit if player has either quest incomplete.
+            if (player->GetQuestStatus(QUEST_DONE_NOTHING_WRONG_HORDE_VERSION) == QUEST_STATUS_INCOMPLETE ||
+                player->GetQuestStatus(QUEST_DONE_NOTHING_WRONG_ALLIANCE_VERSION) == QUEST_STATUS_INCOMPLETE)
+            {
+                // Prevent further clicks
+                me->RemoveFlag(UNIT_FIELD_NPC_FLAGS, UNIT_NPC_FLAG_SPELLCLICK);
+
+                // Give kill credit using entry + GUID to be robust
+                player->KilledMonsterCredit(entry, me->GetGUID());
+
+                // Make non-attackable and non-interactable immediately
+                me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                me->SetReactState(REACT_PASSIVE);
+
+                // Allow client to process credit, then despawn.
+                me->DespawnOrUnsummon(1000);
+            }
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_whelplingsAI(creature);
+    }
+};
+
 void AddSC_burning_steppes()
 {
     new creature_script<npc_burning_steppes_war_reaver>("npc_burning_steppes_war_reaver");
     new go_burning_steppes_war_reaver_part();
     new npc_burning_steppes_chiseled_golem();
+	new npc_whelplings();
 }

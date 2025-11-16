@@ -175,4 +175,5 @@ void AddSC_searing_gorge()
     new npc_glassweb_spider();
     new npc_lunk();
     new npc_lunk_rendan_interact();
+   
 }
