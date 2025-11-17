@@ -1,3 +1,4 @@
+
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "Player.h"
@@ -21,7 +22,8 @@
 // NPC / GO entries
 enum SwampOfSorrowsNPCs
 {
-    NPC_CANNON_SHOOTER = 46245
+    NPC_CANNON_SHOOTER = 46245,
+    NPC_CRAZY_DAISY = 46503  // new NPC
 };
 
 enum SwampOfSorrowsGossip
@@ -45,9 +47,18 @@ static constexpr float CLICK_TARGET_X = -10172.0f;
 static constexpr float CLICK_TARGET_Y = -4183.0f;
 static constexpr float CLICK_TARGET_Z = 22.0f;
 
-// Jump tuning
+// Crazy Daisy specific landing target (change to desired coordinates)
+static constexpr float CRAZY_DAISY_TARGET_X = -10798.0f;
+static constexpr float CRAZY_DAISY_TARGET_Y = -3836.0f;
+static constexpr float CRAZY_DAISY_TARGET_Z = 21.5f;
+
+// Jump tuning (defaults)
 static constexpr float JUMP_SPEED = 75.0f;
 static constexpr float JUMP_ARC_HEIGHT = 25.0f;
+
+// Crazy Daisy specific jump tuning
+static constexpr float CRAZY_DAISY_JUMP_SPEED = 200.0f;     // example: faster launch for Daisy
+static constexpr float CRAZY_DAISY_JUMP_ARC_HEIGHT = 30.0f; // example different arc
 
 // Search radius to locate the cannon
 static constexpr float CANNON_SEARCH_RADIUS = 20.0f;
@@ -71,10 +82,17 @@ static constexpr uint32 SPLINE_END_BUFFER_MS = 100;
 // Increase if it still triggers too early on your client.
 static constexpr uint32 LAND_CAST_BUFFER_MS = 600;
 
+// Crazy Daisy specific landing-spell buffer (ms)
+static constexpr uint32 CRAZY_DAISY_LAND_CAST_BUFFER_MS = 1200;
+
 // Helper shared logic used by both NPC and GO handlers.
-// destX/Y/Z default to the NPC target; pass CLICK_TARGET_* when calling from the clickable GO.
+// destX/Y/Z default to the NPC target; pass CLICK_TARGET_* or CRAZY_DAISY_TARGET_* when calling from the clickable GO or Crazy Daisy.
+// speedXY and speedZ default to JUMP_SPEED / JUMP_ARC_HEIGHT; pass CRAZY_DAISY_JUMP_SPEED/CRAZY_DAISY_JUMP_ARC_HEIGHT for Daisy.
+// landCastBuffer default uses LAND_CAST_BUFFER_MS; Daisy can pass CRAZY_DAISY_LAND_CAST_BUFFER_MS.
 static void HandlePlayerLoadAndLaunch(Player* player, WorldObject* source, uint64 sourceGUID,
-    float destX = TARGET_X, float destY = TARGET_Y, float destZ = TARGET_Z)
+    float destX = TARGET_X, float destY = TARGET_Y, float destZ = TARGET_Z,
+    float speedXY = JUMP_SPEED, float speedZ = JUMP_ARC_HEIGHT,
+    uint32 landCastBuffer = LAND_CAST_BUFFER_MS)
 {
     if (!player || !source)
         return;
@@ -111,7 +129,7 @@ static void HandlePlayerLoadAndLaunch(Player* player, WorldObject* source, uint6
     WorldObject* capturedSource = source;    // will be checked before use (may be nullptr or removed)
 
     // Schedule launch on the player's event queue (safe because we scheduled on player->m_Events)
-    capturedPlayer->m_Events.Schedule(LAUNCH_DELAY_MS, 1, [playerGUID, srcGUID, originalScale, capturedPlayer, capturedSource, destX, destY, destZ]()
+    capturedPlayer->m_Events.Schedule(LAUNCH_DELAY_MS, 1, [playerGUID, srcGUID, originalScale, capturedPlayer, capturedSource, destX, destY, destZ, speedXY, speedZ, landCastBuffer]()
         {
             // Use the captured player pointer directly (safe: lambda scheduled on player's event queue).
             Player* p = capturedPlayer;
@@ -143,15 +161,15 @@ static void HandlePlayerLoadAndLaunch(Player* player, WorldObject* source, uint6
                     cr->CastSpell(p, SPELL_CANNON_PREP);
             }
 
-            // Launch with a smooth arc to the provided destination
-            p->GetMotionMaster()->MoveJump(destX, destY, destZ, JUMP_SPEED, JUMP_ARC_HEIGHT);
+            // Launch with a smooth arc to the provided destination using provided speeds
+            p->GetMotionMaster()->MoveJump(destX, destY, destZ, speedXY, speedZ);
 
             // Schedule the landing spell at spline end (landing moment) plus a small buffer to avoid early firing.
             uint32 dur = p->GetSplineDuration();
             if (dur > 0)
             {
-                // schedule cast of SPELL_ON_LAND slightly after landing time
-                p->m_Events.Schedule(dur + LAND_CAST_BUFFER_MS, 1, [capturedPlayer]()
+                // schedule cast of SPELL_ON_LAND slightly after landing time using provided buffer
+                p->m_Events.Schedule(dur + landCastBuffer, 1, [capturedPlayer]()
                     {
                         Player* pLand = capturedPlayer;
                         if (!pLand || !pLand->IsAlive())
@@ -211,8 +229,48 @@ public:
             cannon = creature->FindNearestGameObject(GO_CANNON, CANNON_SEARCH_RADIUS);
 
         // Use helper to load and schedule the launch. Provide the cannon (or NPC) as the source.
-        // NPC uses default target (TARGET_X/Y/Z).
+        // NPC uses default target (TARGET_X/Y/Z) and default speed.
         HandlePlayerLoadAndLaunch(player, cannon ? (WorldObject*)cannon : (WorldObject*)creature, (cannon ? cannon->GetGUID() : creature->GetGUID()));
+
+        return true;
+    }
+};
+
+/* Crazy Daisy NPC script */
+class npc_crazy_daisy : public CreatureScript
+{
+public:
+    npc_crazy_daisy() : CreatureScript("npc_crazy_daisy") {}
+
+    bool OnGossipHello(Player* player, Creature* creature) override
+    {
+        player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "Shoot me, Crazy Daisy!", GOSSIP_SENDER_MAIN, ACTION_SHOOT);
+        player->SEND_GOSSIP_MENU(player->GetGossipTextId(creature), creature->GetGUID());
+        return true;
+    }
+
+    bool OnGossipSelect(Player* player, Creature* creature, uint32 /*sender*/, uint32 action) override
+    {
+        player->PlayerTalkClass->ClearMenus();
+
+        if (action != ACTION_SHOOT)
+        {
+            player->CLOSE_GOSSIP_MENU();
+            return false;
+        }
+
+        player->CLOSE_GOSSIP_MENU();
+
+        if (player->IsOnVehicle())
+            player->ExitVehicle();
+
+        // Crazy Daisy uses the same world cannon (GO_CANNON). Find nearest and launch to CRAZY_DAISY_TARGET_* with Daisy speed and Daisy buffer.
+        GameObject* cannon = player->FindNearestGameObject(GO_CANNON, CANNON_SEARCH_RADIUS);
+        if (!cannon)
+            cannon = creature->FindNearestGameObject(GO_CANNON, CANNON_SEARCH_RADIUS);
+
+        HandlePlayerLoadAndLaunch(player, cannon ? (WorldObject*)cannon : (WorldObject*)creature, (cannon ? cannon->GetGUID() : creature->GetGUID()),
+            CRAZY_DAISY_TARGET_X, CRAZY_DAISY_TARGET_Y, CRAZY_DAISY_TARGET_Z, CRAZY_DAISY_JUMP_SPEED, CRAZY_DAISY_JUMP_ARC_HEIGHT, CRAZY_DAISY_LAND_CAST_BUFFER_MS);
 
         return true;
     }
@@ -244,7 +302,6 @@ public:
 
         player->CLOSE_GOSSIP_MENU();
 
-        // If player is in a vehicle, remove them first.
         if (player->IsOnVehicle())
             player->ExitVehicle();
 
@@ -259,5 +316,6 @@ public:
 void AddSC_swamp_of_sorrows()
 {
     new npc_cannon_shooter_swamp();
+    new npc_crazy_daisy();
     new go_cannon_loader();
 }
