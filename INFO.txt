@@ -22,31 +22,35 @@ solocraft balancing added.
 
 ZONES:
 
-Northshire - complete
+Elwynn Forest  = can finish
 
-Elwynn Forest = complete
+Westfall       = can finish
 
-Westfall     = can finish
+redridge       = can finish
 
-redridge     = can finish
+duskwood       = can finish
 
-duskwood     = can finish
+STV NORTH      = can finish
 
-STV NORTH    = can finish
+STV CAPE       = can finish
 
-STV CAPE     = can finish
+WPL            = can finish
 
-WPL          =  can finish
+EPL            = can finish
 
-EPL          = can finish
+badlands       = can finish
+ 
+searing gorge  = can finish 
 
-badlands     = can finish
+burning steps  = can finish
 
-Wandering isle = works, can finish
+blasted lands  = can finish
 
-gilneas = works, can finish
+Wandering isle = can finish
 
-kazan = works, can finish
+gilneas        = can finish
+
+kazan          = can finish
 -------------------------------------------------------------
 current issues:
 
