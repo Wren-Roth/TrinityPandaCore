@@ -18,29 +18,14 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-SDName: Hellfire_Peninsula
-SD%Complete: 100
-SDComment: Quest support: 9375, 9410, 9418, 10129, 10146, 10162, 10163, 10340, 10346, 10347, 10382 (Special flight paths)
-SDCategory: Hellfire Peninsula
-EndScriptData */
-
-/* ContentData
-npc_aeranas
-npc_ancestral_wolf
-go_haaleshi_altar
-npc_naladu
-npc_tracy_proudwell
-npc_trollbane
-npc_wounded_blood_elf
-EndContentData */
-
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
 #include "ScriptedEscortAI.h"
 #include "Player.h"
 #include "WorldSession.h"
+#include "SpellScript.h"
+#include "ObjectAccessor.h"
 
 /*######
 ## npc_aeranas
@@ -48,20 +33,20 @@ EndContentData */
 
 enum Aeranas
 {
-    SAY_SUMMON              = 0,
-    SAY_FREE                = 1,
+    SAY_SUMMON = 0,
+    SAY_FREE = 1,
 
-    FACTION_HOSTILE         = 16,
-    FACTION_FRIENDLY        = 35,
+    FACTION_HOSTILE = 16,
+    FACTION_FRIENDLY = 35,
 
-    SPELL_ENVELOPING_WINDS  = 15535,
-    SPELL_SHOCK             = 12553
+    SPELL_ENVELOPING_WINDS = 15535,
+    SPELL_SHOCK = 12553
 };
 
 class npc_aeranas : public CreatureScript
 {
 public:
-    npc_aeranas() : CreatureScript("npc_aeranas") { }
+    npc_aeranas() : CreatureScript("npc_aeranas") {}
 
     CreatureAI* GetAI(Creature* creature) const override
     {
@@ -70,7 +55,7 @@ public:
 
     struct npc_aeranasAI : public ScriptedAI
     {
-        npc_aeranasAI(Creature* creature) : ScriptedAI(creature) { }
+        npc_aeranasAI(Creature* creature) : ScriptedAI(creature) {}
 
         uint32 Faction_Timer;
         uint32 EnvelopingWinds_Timer;
@@ -96,7 +81,8 @@ public:
                 {
                     me->setFaction(FACTION_HOSTILE);
                     Faction_Timer = 0;
-                } else Faction_Timer -= diff;
+                }
+                else Faction_Timer -= diff;
             }
 
             if (!UpdateVictim())
@@ -117,13 +103,15 @@ public:
             {
                 DoCastVictim(SPELL_SHOCK);
                 Shock_Timer = 10000;
-            } else Shock_Timer -= diff;
+            }
+            else Shock_Timer -= diff;
 
             if (EnvelopingWinds_Timer <= diff)
             {
                 DoCastVictim(SPELL_ENVELOPING_WINDS);
                 EnvelopingWinds_Timer = 25000;
-            } else EnvelopingWinds_Timer -= diff;
+            }
+            else EnvelopingWinds_Timer -= diff;
 
             DoMeleeAttackIfReady();
         }
@@ -136,19 +124,19 @@ public:
 
 enum AncestralWolf
 {
-    EMOTE_WOLF_LIFT_HEAD            = 0,
-    EMOTE_WOLF_HOWL                 = 1,
-    SAY_WOLF_WELCOME                = 2,
+    EMOTE_WOLF_LIFT_HEAD = 0,
+    EMOTE_WOLF_HOWL = 1,
+    SAY_WOLF_WELCOME = 2,
 
-    SPELL_ANCESTRAL_WOLF_BUFF       = 29981,
+    SPELL_ANCESTRAL_WOLF_BUFF = 29981,
 
-    NPC_RYGA                        = 17123
+    NPC_RYGA = 17123
 };
 
 class npc_ancestral_wolf : public CreatureScript
 {
 public:
-    npc_ancestral_wolf() : CreatureScript("npc_ancestral_wolf") { }
+    npc_ancestral_wolf() : CreatureScript("npc_ancestral_wolf") {}
 
     CreatureAI* GetAI(Creature* creature) const override
     {
@@ -190,16 +178,16 @@ public:
         {
             switch (waypointId)
             {
-                case 0:
-                    Talk(EMOTE_WOLF_LIFT_HEAD);
-                    break;
-                case 2:
-                    Talk(EMOTE_WOLF_HOWL);
-                    break;
-                case 50:
-                    if (pRyga && pRyga->IsAlive() && !pRyga->IsInCombat())
-                        pRyga->AI()->Talk(SAY_WOLF_WELCOME);
-                    break;
+            case 0:
+                Talk(EMOTE_WOLF_LIFT_HEAD);
+                break;
+            case 2:
+                Talk(EMOTE_WOLF_HOWL);
+                break;
+            case 50:
+                if (pRyga && pRyga->IsAlive() && !pRyga->IsInCombat())
+                    pRyga->AI()->Talk(SAY_WOLF_WELCOME);
+                break;
             }
         }
     };
@@ -213,18 +201,18 @@ public:
 
 enum Naladu
 {
-    GOSSIP_TEXTID_NALADU1   = 9788
+    GOSSIP_TEXTID_NALADU1 = 9788
 };
 
 class npc_naladu : public CreatureScript
 {
 public:
-    npc_naladu() : CreatureScript("npc_naladu") { }
+    npc_naladu() : CreatureScript("npc_naladu") {}
 
     bool OnGossipSelect(Player* player, Creature* creature, uint32 /*sender*/, uint32 action) override
     {
         player->PlayerTalkClass->ClearMenus();
-        if (action == GOSSIP_ACTION_INFO_DEF+1)
+        if (action == GOSSIP_ACTION_INFO_DEF + 1)
             player->SEND_GOSSIP_MENU(GOSSIP_TEXTID_NALADU1, creature->GetGUID());
 
         return true;
@@ -235,7 +223,7 @@ public:
         if (creature->IsQuestGiver())
             player->PrepareQuestMenu(creature->GetGUID());
 
-        player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_NALADU_ITEM1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+1);
+        player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_NALADU_ITEM1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
         player->SEND_GOSSIP_MENU(player->GetGossipTextId(creature), creature->GetGUID());
         return true;
     }
@@ -251,30 +239,30 @@ public:
 
 enum Tracy
 {
-    GOSSIP_TEXTID_TRACY_PROUDWELL1       = 10689,
-    QUEST_DIGGING_FOR_PRAYER_BEADS       = 10916
+    GOSSIP_TEXTID_TRACY_PROUDWELL1 = 10689,
+    QUEST_DIGGING_FOR_PRAYER_BEADS = 10916
 };
 
 class npc_tracy_proudwell : public CreatureScript
 {
 public:
-    npc_tracy_proudwell() : CreatureScript("npc_tracy_proudwell") { }
+    npc_tracy_proudwell() : CreatureScript("npc_tracy_proudwell") {}
 
     bool OnGossipSelect(Player* player, Creature* creature, uint32 /*sender*/, uint32 action) override
     {
         player->PlayerTalkClass->ClearMenus();
         switch (action)
         {
-            case GOSSIP_ACTION_INFO_DEF+1:
-                player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_TRACY_PROUDWELL_ITEM2, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 2);
-                player->SEND_GOSSIP_MENU(GOSSIP_TEXTID_TRACY_PROUDWELL1, creature->GetGUID());
-                break;
-            case GOSSIP_ACTION_INFO_DEF+2:
-                player->SEND_GOSSIP_MENU(player->GetGossipTextId(creature), creature->GetGUID());
-                break;
-            case GOSSIP_ACTION_TRADE:
-                player->GetSession()->SendListInventory(creature->GetGUID());
-                break;
+        case GOSSIP_ACTION_INFO_DEF + 1:
+            player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_TRACY_PROUDWELL_ITEM2, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 2);
+            player->SEND_GOSSIP_MENU(GOSSIP_TEXTID_TRACY_PROUDWELL1, creature->GetGUID());
+            break;
+        case GOSSIP_ACTION_INFO_DEF + 2:
+            player->SEND_GOSSIP_MENU(player->GetGossipTextId(creature), creature->GetGUID());
+            break;
+        case GOSSIP_ACTION_TRADE:
+            player->GetSession()->SendListInventory(creature->GetGUID());
+            break;
         }
 
         return true;
@@ -306,31 +294,31 @@ public:
 
 enum Trollbane
 {
-    GOSSIP_TEXTID_TROLLBANE1        = 9932,
-    GOSSIP_TEXTID_TROLLBANE2        = 9933,
-    GOSSIP_TEXTID_TROLLBANE3        = 8772
+    GOSSIP_TEXTID_TROLLBANE1 = 9932,
+    GOSSIP_TEXTID_TROLLBANE2 = 9933,
+    GOSSIP_TEXTID_TROLLBANE3 = 8772
 };
 
 class npc_trollbane : public CreatureScript
 {
 public:
-    npc_trollbane() : CreatureScript("npc_trollbane") { }
+    npc_trollbane() : CreatureScript("npc_trollbane") {}
 
     bool OnGossipSelect(Player* player, Creature* creature, uint32 /*sender*/, uint32 action) override
     {
         player->PlayerTalkClass->ClearMenus();
         switch (action)
         {
-            case GOSSIP_ACTION_INFO_DEF+1:
-                player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_TROLLBANE_ITEM2, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 2);
-                player->SEND_GOSSIP_MENU(GOSSIP_TEXTID_TROLLBANE1, creature->GetGUID());
-                break;
-            case GOSSIP_ACTION_INFO_DEF+2:
-                player->SEND_GOSSIP_MENU(GOSSIP_TEXTID_TROLLBANE2, creature->GetGUID());
-                break;
-            case GOSSIP_ACTION_INFO_DEF+3:
-                player->SEND_GOSSIP_MENU(GOSSIP_TEXTID_TROLLBANE3, creature->GetGUID());
-                break;
+        case GOSSIP_ACTION_INFO_DEF + 1:
+            player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_TROLLBANE_ITEM2, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 2);
+            player->SEND_GOSSIP_MENU(GOSSIP_TEXTID_TROLLBANE1, creature->GetGUID());
+            break;
+        case GOSSIP_ACTION_INFO_DEF + 2:
+            player->SEND_GOSSIP_MENU(GOSSIP_TEXTID_TROLLBANE2, creature->GetGUID());
+            break;
+        case GOSSIP_ACTION_INFO_DEF + 3:
+            player->SEND_GOSSIP_MENU(GOSSIP_TEXTID_TROLLBANE3, creature->GetGUID());
+            break;
         }
 
         return true;
@@ -354,20 +342,20 @@ public:
 
 enum WoundedBloodElf
 {
-    SAY_ELF_START               = 0,
-    SAY_ELF_SUMMON1             = 1,
-    SAY_ELF_RESTING             = 2,
-    SAY_ELF_SUMMON2             = 3,
-    SAY_ELF_COMPLETE            = 4,
-    SAY_ELF_AGGRO               = 5,
+    SAY_ELF_START = 0,
+    SAY_ELF_SUMMON1 = 1,
+    SAY_ELF_RESTING = 2,
+    SAY_ELF_SUMMON2 = 3,
+    SAY_ELF_COMPLETE = 4,
+    SAY_ELF_AGGRO = 5,
 
-    QUEST_ROAD_TO_FALCON_WATCH  = 9375
+    QUEST_ROAD_TO_FALCON_WATCH = 9375
 };
 
 class npc_wounded_blood_elf : public CreatureScript
 {
 public:
-    npc_wounded_blood_elf() : CreatureScript("npc_wounded_blood_elf") { }
+    npc_wounded_blood_elf() : CreatureScript("npc_wounded_blood_elf") {}
 
     bool OnQuestAccept(Player* player, Creature* creature, Quest const* quest) override
     {
@@ -390,7 +378,7 @@ public:
 
     struct npc_wounded_blood_elfAI : public npc_escortAI
     {
-        npc_wounded_blood_elfAI(Creature* creature) : npc_escortAI(creature) { }
+        npc_wounded_blood_elfAI(Creature* creature) : npc_escortAI(creature) {}
 
         void WaypointReached(uint32 waypointId) override
         {
@@ -400,33 +388,33 @@ public:
 
             switch (waypointId)
             {
-                case 0:
-                    Talk(SAY_ELF_START, player);
-                    break;
-                case 9:
-                    Talk(SAY_ELF_SUMMON1, player);
-                    // Spawn two Haal'eshi Talonguard
-                    DoSpawnCreature(16967, -15, -15, 0, 0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 5000);
-                    DoSpawnCreature(16967, -17, -17, 0, 0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 5000);
-                    break;
-                case 13:
-                    Talk(SAY_ELF_RESTING, player);
-                    break;
-                case 14:
-                    Talk(SAY_ELF_SUMMON2, player);
-                    // Spawn two Haal'eshi Windwalker
-                    DoSpawnCreature(16966, -15, -15, 0, 0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 5000);
-                    DoSpawnCreature(16966, -17, -17, 0, 0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 5000);
-                    break;
-                case 27:
-                    Talk(SAY_ELF_COMPLETE, player);
-                    // Award quest credit
-                    player->GroupEventHappens(QUEST_ROAD_TO_FALCON_WATCH, me);
-                    break;
+            case 0:
+                Talk(SAY_ELF_START, player);
+                break;
+            case 9:
+                Talk(SAY_ELF_SUMMON1, player);
+                // Spawn two Haal'eshi Talonguard
+                DoSpawnCreature(16967, -15, -15, 0, 0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 5000);
+                DoSpawnCreature(16967, -17, -17, 0, 0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 5000);
+                break;
+            case 13:
+                Talk(SAY_ELF_RESTING, player);
+                break;
+            case 14:
+                Talk(SAY_ELF_SUMMON2, player);
+                // Spawn two Haal'eshi Windwalker
+                DoSpawnCreature(16966, -15, -15, 0, 0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 5000);
+                DoSpawnCreature(16966, -17, -17, 0, 0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 5000);
+                break;
+            case 27:
+                Talk(SAY_ELF_COMPLETE, player);
+                // Award quest credit
+                player->GroupEventHappens(QUEST_ROAD_TO_FALCON_WATCH, me);
+                break;
             }
         }
 
-        void Reset() override { }
+        void Reset() override {}
 
         void EnterCombat(Unit* /*who*/) override
         {
@@ -447,15 +435,15 @@ public:
 
 enum FelGuard
 {
-    SPELL_SUMMON_POO                              = 37688,
+    SPELL_SUMMON_POO = 37688,
 
-    NPC_DERANGED_HELBOAR                          = 16863
+    NPC_DERANGED_HELBOAR = 16863
 };
 
 class npc_fel_guard_hound : public CreatureScript
 {
 public:
-    npc_fel_guard_hound() : CreatureScript("npc_fel_guard_hound") { }
+    npc_fel_guard_hound() : CreatureScript("npc_fel_guard_hound") {}
 
     CreatureAI* GetAI(Creature* creature) const override
     {
@@ -464,7 +452,7 @@ public:
 
     struct npc_fel_guard_houndAI : public ScriptedAI
     {
-        npc_fel_guard_houndAI(Creature* creature) : ScriptedAI(creature) { }
+        npc_fel_guard_houndAI(Creature* creature) : ScriptedAI(creature) {}
 
         uint32 uiCheckTimer;
         uint64 uiHelboarGUID;
@@ -503,7 +491,8 @@ public:
                     }
                 }
                 uiCheckTimer = 5000;
-            }else uiCheckTimer -= uiDiff;
+            }
+            else uiCheckTimer -= uiDiff;
 
             if (!UpdateVictim())
                 return;
@@ -512,6 +501,180 @@ public:
         }
     };
 };
+namespace
+{
+    // Bunny entries (updated earlier)
+    static constexpr uint32 BUNNY_1 = 21236;
+    static constexpr uint32 BUNNY_2 = 19009;
+    static constexpr uint32 BUNNY_3 = 21237;
+    static constexpr uint32 BUNNY_4 = 18818;
+
+    // Spell id the player casts (updated to the correct spell)
+    static constexpr uint32 SPELL_LAYING_WASTE = 32979;
+
+    // Search radius to look for bunnies when the spell is cast
+    static constexpr float BUNNY_SEARCH_RADIUS = 10.0f;
+
+    // Time (ms) before the bunny is respawned after being "killed"
+    static constexpr uint32 BUNNY_RESPAWN_MS = 30 * IN_MILLISECONDS; // 30s
+
+    // When we respawn the bunny we re-apply invisibility by setting display scale to tiny and making not selectable.
+    static void MakeBunnyInvisible(Creature* bunny)
+    {
+        if (!bunny)
+            return;
+
+        // Very small scale to hide the model (also UpdateVisibilityForPlayer call to push to clients).
+        bunny->SetObjectScale(0.01f);
+        bunny->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+        bunny->UpdateObjectVisibility();
+    }
+}
+
+class spell_laying_waste : public SpellScriptLoader
+{
+public:
+    spell_laying_waste() : SpellScriptLoader("spell_laying_waste") {}
+
+    class spell_laying_waste_SpellScript : public SpellScript
+    {
+        PrepareSpellScript(spell_laying_waste_SpellScript);
+
+        void HandleAfterCast()
+        {
+            if (GetSpellInfo() && GetSpellInfo()->Id != SPELL_LAYING_WASTE)
+                return;
+
+            if (Player* caster = GetCaster()->ToPlayer())
+            {
+                // Quest id for "Laying waste to the unwanted"
+                static constexpr uint32 QUEST_LAYING_WASTE = 10078;
+
+                // Search for any of the bunny entries in range. We stop after finding the first valid bunny.
+                std::vector<uint32> bunnyEntries = { BUNNY_1, BUNNY_2, BUNNY_3, BUNNY_4 };
+
+                for (uint32 entry : bunnyEntries)
+                {
+                    std::list<Creature*> found;
+
+                    // Fill 'found' with creatures of this entry near the caster.
+                    caster->GetCreatureListWithEntryInGrid(found, entry, BUNNY_SEARCH_RADIUS);
+
+                    if (!found.empty())
+                    {
+                        // pick the nearest
+                        found.sort(Trinity::ObjectDistanceOrderPred(caster, true));
+                        Creature* bunny = found.front();
+                        if (!bunny)
+                            continue;
+
+                        // Only give credit if the player actually has the quest and hasn't met the required count yet
+                        if (caster->GetQuestStatus(QUEST_LAYING_WASTE) == QUEST_STATUS_INCOMPLETE)
+                        {
+                            // GetReqKillOrCastCurrentCount returns current count for that quest objective (0 if not yet)
+                            if (!caster->GetReqKillOrCastCurrentCount(QUEST_LAYING_WASTE, bunny->GetEntry()))
+                            {
+                                // Use entry + guid 0 to grant credit for the quest objective.
+                                // Many scripts use guid==0 for credit; core will attribute credit to the correct objective.
+                                caster->KilledMonsterCredit(bunny->GetEntry(), 0);
+                            }
+                        }
+
+                        // Store spawn coordinates before despawn
+                        float bx, by, bz, bo;
+                        bunny->GetPosition(bx, by, bz, bo);
+
+                        // Remove the bunny from the world now (despawn).
+                        bunny->DespawnOrUnsummon();
+
+                        // Schedule respawn via the player's event queue.
+                        caster->m_Events.Schedule(BUNNY_RESPAWN_MS, 1, [entry, bx, by, bz, bo, caster]() mutable
+                            {
+                                if (!caster->IsInWorld() || !caster->IsAlive())
+                                    return;
+
+                                Creature* respawned = caster->SummonCreature(entry, bx, by, bz, bo, TEMPSUMMON_MANUAL_DESPAWN, 0);
+                                if (respawned)
+                                {
+                                    MakeBunnyInvisible(respawned);
+                                    respawned->SetFullHealth();
+                                    respawned->RemoveAllAuras();
+                                }
+                            });
+
+                        // We handled one bunny - stop (only one bunny should be affected per cast).
+                        break;
+                    }
+                }
+            }
+        }
+
+        void Register() override
+        {
+            AfterCast += SpellCastFn(spell_laying_waste_SpellScript::HandleAfterCast);
+        }
+    };
+
+    SpellScript* GetSpellScript() const override
+    {
+        return new spell_laying_waste_SpellScript();
+    }
+};
+
+class npc_unwanted_bunny_credit : public CreatureScript
+{
+public:
+    npc_unwanted_bunny_credit() : CreatureScript("npc_unwanted_bunny_credit") {}
+
+    struct npc_unwanted_bunny_creditAI : public ScriptedAI
+    {
+        npc_unwanted_bunny_creditAI(Creature* creature) : ScriptedAI(creature) {}
+
+        void Reset() override
+        {
+            MakeBunnyInvisible(me);
+            me->SetFullHealth();
+        }
+
+        // Called when a spell hits this creature
+        void SpellHit(Unit* caster, SpellInfo const* spell) override
+        {
+            if (!caster || !spell)
+                return;
+
+            if (spell->Id != SPELL_LAYING_WASTE)
+                return;
+
+            if (Player* player = caster->ToPlayer())
+            {
+                // Give the player quest/kill credit for this bunny entry
+                player->KilledMonsterCredit(me->GetEntry(), me->GetGUID());
+
+                // Capture spawn coordinates
+                float bx, by, bz, bo;
+                me->GetPosition(bx, by, bz, bo);
+
+                // Remove the current bunny instance
+                me->DespawnOrUnsummon();
+
+                // Immediately respawn a replacement so other players can also get credit.
+                // Summon via the player to avoid ambiguous Map::SummonCreature overloads.
+                if (Creature* respawned = player->SummonCreature(me->GetEntry(), bx, by, bz, bo, TEMPSUMMON_MANUAL_DESPAWN, 0))
+                {
+                    MakeBunnyInvisible(respawned);
+                    respawned->SetFullHealth();
+                    respawned->RemoveAllAuras();
+                }
+            }
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_unwanted_bunny_creditAI(creature);
+    }
+};
+  
 
 void AddSC_hellfire_peninsula()
 {
@@ -522,4 +685,8 @@ void AddSC_hellfire_peninsula()
     new npc_trollbane();
     new npc_wounded_blood_elf();
     new npc_fel_guard_hound();
+	new npc_unwanted_bunny_credit();
+    // register added scripts
+    new spell_laying_waste();
+
 }
