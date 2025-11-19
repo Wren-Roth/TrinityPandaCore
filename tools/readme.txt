@@ -1,0 +1,1 @@
+Drop your wow.exe onto this, a patched exe is needed.
