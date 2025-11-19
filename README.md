@@ -4,6 +4,11 @@ Windows | GCC | Clang
 :------------: | :------------: | :------------:
 [![Windows x64](https://github.com/ReyDonovan/TrinityPandaCore/actions/workflows/build-win-x64.yml/badge.svg)](https://github.com/ReyDonovan/TrinityPandaCore/actions/workflows/build-win-x64.yml)
 
+just casually working on this, making zones work by either fixing, using a work around or autocompletion if it's too broke for me to fix.
+
+added some new stuff like a few modules to make things less annoying solo.
+
+
 ## Requirements
 + Platform: Linux, Windows or Mac
 + Processor with SSE2 support
