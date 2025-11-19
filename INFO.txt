@@ -5,7 +5,15 @@ COMPLETED FEATURES:
 
 Module implementation = yes! config files for modules go directly into worldserver.conf
 
-Modules: leech
+Modules: leech, mod-items, init, solocraft
+
+mod-items gives the player 4 large bags and a set of boa gear for their class.
+
+mod-leech: health on doing damage.
+
+solocraft, it's the solocraft module, edited a bit to work with this core and a bit more options.
+
+init: modified code from playerbots module to gear up the player at the players current level, modified a bit and fixed some issues, items can be disallowed in the world database.
 ---------------------------
 
 flightpaths = working.
@@ -18,39 +26,43 @@ Proving Grounds = Seems to work, i tried on a green geared shadowpriest and fail
 
 Solo LFG added.
 
-solocraft balancing added.
 
 ZONES:
 
-Elwynn Forest  = can finish
+currently, can get to level 60 on alliance eastern kingdoms, more to do.
 
-Westfall       = can finish
+Elwynn Forest    = can finish
 
-redridge       = can finish
+Westfall         = can finish
 
-duskwood       = can finish
+redridge         = can finish
 
-STV NORTH      = can finish
+duskwood         = can finish
 
-STV CAPE       = can finish
+STV NORTH        = can finish
 
-WPL            = can finish
+STV CAPE         = can finish
 
-EPL            = can finish
+WPL              = can finish
 
-badlands       = can finish
+EPL              = can finish
+
+badlands         = can finish
  
-searing gorge  = can finish 
+searing gorge    = can finish 
 
-burning steps  = can finish
+burning steps    = can finish
 
-blasted lands  = can finish
+blasted lands    = can finish
 
-Wandering isle = can finish
+swamp of sorrows = can finish
 
-gilneas        = can finish
 
-kazan          = can finish
+Wandering isle   = can finish
+
+gilneas          = can finish
+
+kazan            = can finish
 -------------------------------------------------------------
 current issues:
 
@@ -79,6 +91,6 @@ CATA raids = not yet tested
 
 --------------------------------------------------------------
 
-wotlk tbc vanilla content = not yet tested
+wotlk tbc vanilla content = not fully tested
 
 --------------------------------------------------------------
