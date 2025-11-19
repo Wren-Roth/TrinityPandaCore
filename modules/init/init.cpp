@@ -454,6 +454,17 @@ bool RandomItemManager::ShouldEquipWeaponForSpec(Classes playerclass, Specializa
         }
         break;
     }
+    case CLASS_DEATH_KNIGHT:
+    {
+        // Prefer two-handed weapon subclasses for Death Knights (Blood preference).
+        mh_weapons = {
+            ITEM_SUBCLASS_WEAPON_MACE2,
+            ITEM_SUBCLASS_WEAPON_POLEARM,
+            ITEM_SUBCLASS_WEAPON_SWORD2,
+            ITEM_SUBCLASS_WEAPON_AXE2
+        };
+        break;
+    }
     case CLASS_HUNTER:
     {
         mh_weapons = { ITEM_SUBCLASS_WEAPON_BOW, ITEM_SUBCLASS_WEAPON_CROSSBOW, ITEM_SUBCLASS_WEAPON_GUN };
@@ -816,6 +827,10 @@ uint32 RandomItemManager::FindBestItemForLevelAndEquip(Player* bot, InventoryTyp
             if (proto->RequiredLevel > level) continue;
             if ((proto->AllowableClass & bot->getClassMask()) == 0 || (proto->AllowableRace & bot->getRaceMask()) == 0) continue;
             if (level < 10 && proto->ItemLevel > 100) continue;
+
+            // NEW: explicitly skip epic quality items
+            if (proto->Quality == ItemQualities::ITEM_QUALITY_EPIC)
+                continue;
 
             // Item Quality
             {
