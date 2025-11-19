@@ -65,6 +65,9 @@ public:
         SoloCraftSpellMult = sConfigMgr->GetFloatDefault("SoloCraft.Spellpower.Mult", 2.5);
         SoloCraftStatsMult = sConfigMgr->GetFloatDefault("SoloCraft.Stats.Mult", 100.0);
 
+        // Attack power multiplier (new)
+        SoloCraftAttackPowerMult = sConfigMgr->GetFloatDefault("SoloCraft.Attackpower.Mult", 1.0f);
+
         classes =
         {
             {1, sConfigMgr->GetIntDefault("SoloCraft.Warrior", 100) },
@@ -295,7 +298,7 @@ public:
             {959, sConfigMgr->GetFloatDefault("Solocraft.ShadoPanMonastery", 5.0) }, // Монастырь Шадо-Пан
             {1007, sConfigMgr->GetFloatDefault("Solocraft.Scholomance", 5.0) }, // Некроситет
             {1004, sConfigMgr->GetFloatDefault("Solocraft.ScarletMonastery", 5.0) }, // Монастырь Алого ордена
-            {994, sConfigMgr->GetFloatDefault("Solocraft.Mogu'shanPalace", 5.0) }, // Дворец Могу'шан
+            {994, sConfigMgr->GetIntDefault("Solocraft.Mogu'shanPalace", 5) }, // DONTCARE
             {1008, sConfigMgr->GetFloatDefault("Solocraft.Mogu'shanVaults", 10.0) }, // Подземелья Могу'шан
             {1136, sConfigMgr->GetFloatDefault("Solocraft.SiegeOfOrgrimmar", 10.0) }, // Осада Оргриммара
             {1098, sConfigMgr->GetFloatDefault("Solocraft.ThroneOfThunder", 10.0) }, // Престол Гроз
@@ -407,6 +410,9 @@ public:
     float SoloCraftStatsMult = 100.0;
     float SoloCraftXPMod = 1.0;
 
+    // New: attack power multiplier
+    float SoloCraftAttackPowerMult = 1.0f;
+
     uint32 SolocraftLevelDiff = 1;
     uint32 SolocraftDungeonLevel = 1;
 
@@ -436,7 +442,7 @@ public:
         if (solocraftConfig.SoloCraftEnable && solocraftConfig.SoloCraftAnnounceModule)
         {
             ChatHandler(player->GetSession()).SendSysMessage(SOLOCRAFT_TRINITYSTRING_ACTIVE);
-        } 
+        }
     }
 
     void OnLogout(Player* player) override
@@ -477,7 +483,7 @@ public:
             int dunLevel = CalculateDungeonLevel(map, player);
             int numInGroup = GetNumInGroup(player);
             uint32 classBalance = GetClassBalance(player);
-         
+
             ApplyBuffs(player, map, difficulty, dunLevel, numInGroup, classBalance);
         }
     }
@@ -581,6 +587,7 @@ protected:
         {
 
             int SpellPowerBonus = 0;
+            int AttackPowerBonus = 0;
 
             if (player->HasFlag(PLAYER_FIELD_PLAYER_FLAGS, PLAYER_FLAGS_NO_XP_GAIN))
             {
@@ -603,7 +610,7 @@ protected:
                 }
 
                 QueryResult result = CharacterDatabase.PQuery(
-                    "SELECT `guid`, `Difficulty`, `GroupSize`, `SpellPower`, `Stats` FROM `custom_solocraft_character_stats` WHERE `guid` = %u",
+                    "SELECT `guid`, `Difficulty`, `GroupSize`, `SpellPower`, `Stats`, `AttackPower` FROM `custom_solocraft_character_stats` WHERE `guid` = %u",
                     player->GetGUID()
                 );
 
@@ -680,6 +687,46 @@ protected:
                     }
                 }
 
+                // New: Apply Attack Power boost without altering other stats.
+                // Remove previously stored AttackPower (if any) first, then apply new boost and store it.
+                if (result)
+                {
+                    // index 5 is AttackPower in the SELECT above (if present)
+                    int prevAttackPower = 0;
+                    if (result->GetFieldCount() > 5)
+                        prevAttackPower = (*result)[5].GetUInt32();
+
+                    if (prevAttackPower != 0)
+                    {
+                        // Remove previous stored value (accounting stored Stats multiplier)
+                        float statsMultPct = (*result)[4].GetFloat();
+                        float curAPTotal = player->GetModifierValue(UNIT_MOD_ATTACK_POWER, TOTAL_VALUE);
+                        player->SetModifierValue(UNIT_MOD_ATTACK_POWER, TOTAL_VALUE, curAPTotal - prevAttackPower * statsMultPct);
+
+                        // also remove ranged AP
+                        float curRangedTotal = player->GetModifierValue(UNIT_MOD_ATTACK_POWER_RANGED, TOTAL_VALUE);
+                        player->SetModifierValue(UNIT_MOD_ATTACK_POWER_RANGED, TOTAL_VALUE, curRangedTotal - prevAttackPower * statsMultPct);
+                    }
+                }
+
+                if (difficulty > 0)
+                {
+                    // Calculate a flat Attack Power bonus (separate multiplier controlled by config)
+                    AttackPowerBonus = static_cast<int>((player->getLevel() * solocraftConfig.SoloCraftAttackPowerMult) * difficulty);
+
+                    // Apply to melee attack power total_value (so UpdateAttackPowerAndDamage will include it)
+                    float curAP = player->GetModifierValue(UNIT_MOD_ATTACK_POWER, TOTAL_VALUE);
+                    player->SetModifierValue(UNIT_MOD_ATTACK_POWER, TOTAL_VALUE, curAP + AttackPowerBonus);
+
+                    // Also apply the same to ranged attack power total_value so hunter/ranged get benefit (adjustable if needed)
+                    float curRAP = player->GetModifierValue(UNIT_MOD_ATTACK_POWER_RANGED, TOTAL_VALUE);
+                    player->SetModifierValue(UNIT_MOD_ATTACK_POWER_RANGED, TOTAL_VALUE, curRAP + AttackPowerBonus);
+
+                    // Force recalculation
+                    player->UpdateAttackPowerAndDamage(false);
+                    player->UpdateAttackPowerAndDamage(true);
+                }
+
                 if (!solocraftConfig.SolocraftXPEnabled)
                 {
                     if (!player->HasFlag(PLAYER_FIELD_PLAYER_FLAGS, PLAYER_FLAGS_NO_XP_GAIN))
@@ -704,8 +751,8 @@ protected:
                 }
 
                 CharacterDatabase.PExecute(
-                    "REPLACE INTO `custom_solocraft_character_stats` (`guid`, `Difficulty`, `GroupSize`, `SpellPower`, `Stats`) VALUES (%lu, %f, %u, %i, %f)",
-                    player->GetGUID(), difficulty, numInGroup, SpellPowerBonus, solocraftConfig.SoloCraftStatsMult
+                    "REPLACE INTO `custom_solocraft_character_stats` (`guid`, `Difficulty`, `GroupSize`, `SpellPower`, `Stats`, `AttackPower`) VALUES (%lu, %f, %u, %i, %f, %i)",
+                    player->GetGUID(), difficulty, numInGroup, SpellPowerBonus, solocraftConfig.SoloCraftStatsMult, AttackPowerBonus
                 );
             }
             else
@@ -750,13 +797,16 @@ protected:
     }
     void ClearBuffs(Player* player, Map* map)
     {
-        QueryResult result = CharacterDatabase.PQuery("SELECT `guid`, `Difficulty`, `GroupSize`, `SpellPower`, `Stats` FROM `custom_solocraft_character_stats` WHERE `guid` = %lu", player->GetGUID());
+        QueryResult result = CharacterDatabase.PQuery("SELECT `guid`, `Difficulty`, `GroupSize`, `SpellPower`, `Stats`, `AttackPower` FROM `custom_solocraft_character_stats` WHERE `guid` = %lu", player->GetGUID());
 
         if (result)
         {
             float difficulty = (*result)[1].GetFloat();
             int SpellPowerBonus = (*result)[3].GetUInt32();
             float StatsMultPct = (*result)[4].GetFloat();
+            int AttackPowerBonus = 0;
+            if (result->GetFieldCount() > 5)
+                AttackPowerBonus = (*result)[5].GetUInt32();
 
             ChatHandler(player->GetSession()).PSendSysMessage(player->GetSession()->GetTrinityString(SOLOCRAFT_TRINITYSTRING_CLEAR_BUFFS), player->GetName().c_str(), map->GetMapName(), difficulty, SpellPowerBonus);
 
@@ -800,6 +850,20 @@ protected:
 
                 // remove the exact applied modifier
                 player->HandleStatModifier(UnitMods(UNIT_MOD_STAT_START + i), TOTAL_VALUE, statRemove, false);
+            }
+
+            if (AttackPowerBonus != 0)
+            {
+                // remove AP applied to both melee and ranged TOTAL_VALUE
+                float curAPTotal = player->GetModifierValue(UNIT_MOD_ATTACK_POWER, TOTAL_VALUE);
+                player->SetModifierValue(UNIT_MOD_ATTACK_POWER, TOTAL_VALUE, curAPTotal - AttackPowerBonus);
+
+                float curRangedTotal = player->GetModifierValue(UNIT_MOD_ATTACK_POWER_RANGED, TOTAL_VALUE);
+                player->SetModifierValue(UNIT_MOD_ATTACK_POWER_RANGED, TOTAL_VALUE, curRangedTotal - AttackPowerBonus);
+
+                // Force recalculation
+                player->UpdateAttackPowerAndDamage(false);
+                player->UpdateAttackPowerAndDamage(true);
             }
 
             if (player->GetPowerType() == POWER_MANA && difficulty > 0)
