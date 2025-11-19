@@ -1265,7 +1265,7 @@ AllowTwoSide.Interaction.Guild = 0
 #        Default:     0 - (Disabled)
 #                     1 - (Enabled)
 
-AllowTwoSide.Interaction.Auction = 0
+AllowTwoSide.Interaction.Auction = 1
 
 #
 #    AllowTwoSide.Trade
@@ -2804,7 +2804,7 @@ FirstOfTheKingdom.ThroneOfThunder = 1
 #       Default:     0
 #
 
-AuctionHouseBot.Account = 0
+AuctionHouseBot.Account = 9
 
 #
 #    AuctionHouseBot.Update.Interval
@@ -2820,7 +2820,7 @@ AuctionHouseBot.Update.Interval = 20
 #       Default:     0 - (Disabled)
 #                    1 - (Enabled)
 
-AuctionHouseBot.Seller.Enabled = 0
+AuctionHouseBot.Seller.Enabled = 1
 
 #
 #    AuctionHouseBot.Alliance.Items.Amount.Ratio
@@ -2884,7 +2884,7 @@ AuctionHouseBot.Class.Glyph.Allow.Zero = 0
 #       Default:     0 - (Disabled)
 #                    1 - (Enabled)
 
-AuctionHouseBot.Items.Vendor = 0
+AuctionHouseBot.Items.Vendor = 1
 
 #
 #    AuctionHouseBot.Items.Loot
@@ -2900,7 +2900,7 @@ AuctionHouseBot.Items.Loot = 1
 #       Default:     0 - (Disabled)
 #                    1 - (Enabled)
 
-AuctionHouseBot.Items.Misc = 0
+AuctionHouseBot.Items.Misc = 1
 
 #
 #    AuctionHouseBot.Bind.*
@@ -2933,7 +2933,7 @@ AuctionHouseBot.LockBox.Enabled = 0
 #                    Usually this value is only used once on server start with empty auction table.
 #       Default:     1000
 
-AuctionHouseBot.ItemsPerCycle.Boost = 1000
+AuctionHouseBot.ItemsPerCycle.Boost = 5000
 
 #
 #    AuctionHouseBot.ItemsPerCycle.Normal
@@ -2941,7 +2941,7 @@ AuctionHouseBot.ItemsPerCycle.Boost = 1000
 #                    Usually this value is used always when auction table is already initialised.
 #       Default:     20
 
-AuctionHouseBot.ItemsPerCycle.Normal = 20
+AuctionHouseBot.ItemsPerCycle.Normal = 200
 
 #
 #    AuctionHouseBot.BuyPrice.Seller
@@ -4180,6 +4180,7 @@ Solocraft.Announce = 1
 
 SoloCraft.Debuff.Enable = 1
 SoloCraft.Spellpower.Mult = 4.0
+SoloCraft.Attackpower.Mult = 2.0
 SoloCraft.Stats.Mult = 6000.0
 
 SoloCraft.Death.Knight = 100
