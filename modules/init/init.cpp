@@ -926,7 +926,7 @@ public:
     }
 };
 
-void AddSC_init_gear()
+void AddSC_init()
 {
     // Initialize the RandomItemManager singleton and build its cache at module load
     sRandomItemMgr->Init();
