@@ -8694,7 +8694,16 @@ bool Unit::Attack(Unit* victim, bool meleeAttack)
 
     m_attacking = victim;
     m_attacking->_addAttacker(this);
+    if (GetTypeId() == TYPEID_UNIT && !IsPet())
+    {
+        // Only clear if currently in a non-combat emote state
+        if (GetUInt32Value(UNIT_FIELD_NPC_EMOTESTATE) != 0)
+            SetUInt32Value(UNIT_FIELD_NPC_EMOTESTATE, 0);
 
+        // Force stand state if not already standing
+        if (!IsStandState())
+            SetStandState(UNIT_STAND_STATE_STAND);
+    }
     // Set our target
     SetTarget(victim->GetGUID());
 
@@ -8704,7 +8713,7 @@ bool Unit::Attack(Unit* victim, bool meleeAttack)
     // set position before any AI calls/assistance
     //if (GetTypeId() == TYPEID_UNIT)
     //    ToCreature()->SetCombatStartPosition(GetPositionX(), GetPositionY(), GetPositionZ());
-
+  
     if (GetTypeId() == TYPEID_UNIT && !ToCreature()->IsPet())
     {
         // should not let player enter combat by right clicking target - doesn't helps

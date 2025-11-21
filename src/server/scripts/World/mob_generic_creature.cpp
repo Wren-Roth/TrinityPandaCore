@@ -52,6 +52,10 @@ public:
 
         void EnterCombat(Unit* who) override
         {
+            // Ensure ScriptedAI does its generic visual-sync and nearby creature updates
+            ScriptedAI::EnterCombat(who);
+
+            // Preserve generic_creature specific logic
             if (!me->IsWithinMeleeRange(who))
                 IsSelfRooted = true;
         }

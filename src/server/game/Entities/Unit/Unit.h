@@ -842,6 +842,7 @@ class DispelInfo
     Unit* _dispellerUnit;
     uint32 _dispellerSpell;
     uint8 _chargesRemoved;
+
 };
 
 struct CleanDamage
@@ -3150,7 +3151,7 @@ protected:
     uint32 m_combatTimerPvP = 0;
     uint32 m_combatTimerPvE = 0;
     TimeTrackerSmall m_splineSyncTimer;
-
+    uint32 m_savedEmoteState;
     Diminishing m_Diminishing;
     // Manage all Units that are threatened by us
     HostileRefManager m_HostileRefManager;
