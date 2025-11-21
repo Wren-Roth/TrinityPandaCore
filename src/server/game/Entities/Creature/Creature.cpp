@@ -1572,8 +1572,7 @@ void Creature::setDeathState(DeathState s)
                     SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_SKINNABLE);
         SetFlag(UNIT_FIELD_FLAGS2, UNIT_FLAG2_LOOTABLE);
         
-        if (GetTypeId() == TYPEID_UNIT)
-            ToCreature()->setFaction(35); 
+    
         UpdateObjectVisibility();
         if (HasSearchedAssistance())
         {
