@@ -8,6 +8,11 @@ just casually working on this, making zones work by either fixing, using a work 
 
 added some new stuff like a few modules to make things less annoying solo.
 
+I am going through every zone and quest to make the zone completable.
+
+currently:
+
+Eastern kingdoms is completable on alliance.
 
 ## Requirements
 + Platform: Linux, Windows or Mac
